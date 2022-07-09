@@ -1,4 +1,4 @@
-module thinkingatoms.com/apibase
+module github.com/thinkingatoms/apibase
 
 go 1.18
 

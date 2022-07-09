@@ -2,7 +2,7 @@
 Copyright © 2022 THINKINGATOMS LLC <atom@thinkingatoms.com>
 */
 
-package stripesvc
+package servers
 
 import (
 	"github.com/go-chi/chi/v5"
@@ -10,17 +10,16 @@ import (
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/webhook"
+	"github.com/thinkingatoms/apibase/ez"
+	"github.com/thinkingatoms/apibase/models"
 	errors "golang.org/x/xerrors"
 	"io/ioutil"
 	"net/http"
-	"thinkingatoms.com/apibase/ez"
-	"thinkingatoms.com/apibase/models"
-	"thinkingatoms.com/apibase/servers"
 )
 
 type stripeService struct {
 	name      string
-	server    *servers.Server
+	server    *Server
 	namespace uuid.UUID
 	db        models.DbConn
 	auth      models.Auth
@@ -33,7 +32,7 @@ type stripeService struct {
 	DbURL          string `json:"db_url"`
 }
 
-func CreateStripeService(server *servers.Server, auth models.Auth) (*stripeService, error) {
+func CreateStripeService(server *Server, auth models.Auth) (*stripeService, error) {
 	db := server.GetDb()
 	if db == nil {
 		return nil, errors.New("no database connection")
@@ -61,7 +60,7 @@ func CreateStripeService(server *servers.Server, auth models.Auth) (*stripeServi
 	return &s, nil
 }
 
-func RegisterStripeService(server *servers.Server, auth models.Auth) error {
+func RegisterStripeService(server *Server, auth models.Auth) error {
 	s, err := CreateStripeService(server, auth)
 	if err != nil {
 		return err

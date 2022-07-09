@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/rs/zerolog/log"
+	"github.com/thinkingatoms/apibase/ez"
 	errors "golang.org/x/xerrors"
 	"math"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"thinkingatoms.com/apibase/ez"
 )
 
 //goland:noinspection GoSnakeCaseUsage

@@ -5,7 +5,7 @@ Copyright © 2022 THINKINGATOMS LLC <atom@thinkingatoms.com>
 package cmd
 
 import (
-	"thinkingatoms.com/apibase/servers"
+	"github.com/thinkingatoms/apibase/servers"
 
 	"github.com/spf13/cobra"
 )

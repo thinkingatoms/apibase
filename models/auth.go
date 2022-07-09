@@ -10,12 +10,12 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/jackc/pgx/v4"
 	"github.com/rs/zerolog/log"
+	"github.com/thinkingatoms/apibase/ez"
 	"golang.org/x/crypto/bcrypt"
 	errors "golang.org/x/xerrors"
 	"net/http"
 	"strconv"
 	"strings"
-	"thinkingatoms.com/apibase/ez"
 	"time"
 )
 

@@ -5,10 +5,8 @@ Copyright © 2022 THINKINGATOMS LLC <atom@thinkingatoms.com>
 package cmd
 
 import (
-	"thinkingatoms.com/apibase/authsvc"
-	"thinkingatoms.com/apibase/ez"
-	"thinkingatoms.com/apibase/servers"
-	"thinkingatoms.com/apibase/stripesvc"
+	"github.com/thinkingatoms/apibase/ez"
+	"github.com/thinkingatoms/apibase/servers"
 
 	"github.com/spf13/cobra"
 )
@@ -28,9 +26,9 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		app := servers.NewServer()
 		app.LoadConfig(configs)
-		a := ez.ReturnOrPanic(authsvc.CreateAuth(app))
-		authsvc.RegisterAuthService(app, a, "admin")
-		ez.PanicIfErr(stripesvc.RegisterStripeService(app, a))
+		a := ez.ReturnOrPanic(servers.CreateAuth(app))
+		servers.RegisterAuthService(app, a, "admin")
+		ez.PanicIfErr(servers.RegisterStripeService(app, a))
 		app.Serve()
 	},
 }

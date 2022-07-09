@@ -2,7 +2,7 @@
 Copyright © 2022 THINKINGATOMS LLC <atom@thinkingatoms.com>
 */
 
-package authsvc
+package servers
 
 import (
 	"context"
@@ -15,22 +15,21 @@ import (
 	"github.com/markbates/goth/providers/google"
 	"github.com/markbates/goth/providers/linkedin"
 	"github.com/rs/zerolog/log"
+	"github.com/thinkingatoms/apibase/ez"
+	"github.com/thinkingatoms/apibase/models"
 	errors "golang.org/x/xerrors"
 	"net/http"
 	"strings"
-	"thinkingatoms.com/apibase/ez"
-	"thinkingatoms.com/apibase/models"
-	"thinkingatoms.com/apibase/servers"
 	"time"
 )
 
 type authService struct {
-	server     *servers.Server
+	server     *Server
 	auth       models.Auth
 	adminRoles map[string]bool
 }
 
-func CreateAuth(server *servers.Server) (models.Auth, error) {
+func CreateAuth(server *Server) (models.Auth, error) {
 	db := server.GetDb()
 	if db == nil {
 		return nil, errors.New("no database connection")
@@ -47,7 +46,7 @@ func CreateAuth(server *servers.Server) (models.Auth, error) {
 		server.GetSecret), nil
 }
 
-func RegisterAuthService(server *servers.Server, auth models.Auth, adminRoles string) {
+func RegisterAuthService(server *Server, auth models.Auth, adminRoles string) {
 	roles := make(map[string]bool)
 	for _, role := range strings.Split(adminRoles, ",") {
 		roles[role] = true

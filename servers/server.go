@@ -16,6 +16,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
+	"github.com/thinkingatoms/apibase/ez"
+	"github.com/thinkingatoms/apibase/models"
 	"golang.org/x/sync/errgroup"
 	"math/rand"
 	"net/http"
@@ -24,8 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"thinkingatoms.com/apibase/ez"
-	"thinkingatoms.com/apibase/models"
 	"time"
 )
 
