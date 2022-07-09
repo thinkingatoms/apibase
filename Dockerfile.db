@@ -1,0 +1,3 @@
+FROM postgres:14-alpine AS db
+COPY migration/0001_initdb_up.sql /docker-entrypoint-initdb.d/
+COPY migration/0002_authdb_up.sql /docker-entrypoint-initdb.d/

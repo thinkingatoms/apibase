@@ -1,0 +1,62 @@
+version: "3.7"
+
+services:
+  config:
+    container_name: config
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    command: /appserver static --port=80 -m /:config
+    ports:
+      - "8000:80"
+
+  app:
+    container_name: app
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    command: /appserver auth -c app.json
+    ports:
+      - "3000:80"
+    environment:
+      APP_SECRET: $APP_SECRET
+      DB_SECRET: $DB_SECRET
+      STRIPE_SECRET_KEY: $STRIPE_SECRET_KEY
+      STRIPE_PUBLISHABLE_KEY: $STRIPE_PUBLISHABLE_KEY
+      STRIPE_WEBHOOK_SECRET: $STRIPE_WEBHOOK_SECRET
+      GOOGLE_CLIENT_ID: $GOOGLE_CLIENT_ID
+      GOOGLE_CLIENT_SECRET: $GOOGLE_CLIENT_SECRET
+      LINKEDIN_CLIENT_ID: $LINKEDIN_CLIENT_ID
+      LINKEDIN_CLIENT_SECRET: $LINKEDIN_CLIENT_SECRET
+    depends_on:
+      - "config"
+      - "db"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  db:
+    container_name: db
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    restart: always
+    volumes:
+      - appdb:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: api
+      POSTGRES_PASSWORD: $DB_SECRET
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "2345:5432"
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+
+volumes:
+  appdb:

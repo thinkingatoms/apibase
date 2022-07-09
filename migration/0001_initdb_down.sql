@@ -1,0 +1,10 @@
+--- DROP DATABASE auth CASCADE
+;
+DROP USER IF EXISTS api
+;
+DROP ROLE IF EXISTS readonly
+;
+DROP ROLE IF EXISTS readwrite
+;
+DROP ROLE IF EXISTS admin
+;

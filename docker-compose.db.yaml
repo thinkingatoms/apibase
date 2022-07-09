@@ -1,0 +1,27 @@
+version: "3.7"
+
+services:
+  db:
+    container_name: db
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    restart: always
+    volumes:
+      - appdb:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: api
+      POSTGRES_PASSWORD: $DB_SECRET
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "2345:5432"
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+
+volumes:
+  appdb:

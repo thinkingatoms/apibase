@@ -1,0 +1,36 @@
+{
+  "name": "THINKINGATOMS",
+  "port": 80,
+  "secret": "%(env:APP_SECRET)%",
+  "public": "http://localhost:3000",
+  "db_url": "postgres://api:%(env:DB_SECRET)%@db/app",
+  "cache": {
+    "long_expiry": 86400,
+    "medium_expiry": 3600,
+    "short_expiry": 15,
+    "clean_interval": 60,
+    "short_size": 1000,
+    "medium_size": 10000,
+    "long_size": 10000,
+    "forever_size": 1000
+  },
+  "auth": {
+    "providers": {
+      "google": {
+        "client_id": "%(env:GOOGLE_CLIENT_ID)%",
+        "client_secret": "%(env:GOOGLE_CLIENT_SECRET)%"
+      },
+      "linkedin": {
+        "client_id": "%(env:LINKEDIN_CLIENT_ID)%",
+        "client_secret": "%(env:LINKEDIN_CLIENT_SECRET)%"
+      }
+    }
+  },
+  "stripe": {
+    "secret_key": "%(env:STRIPE_SECRET_KEY)%",
+    "publishable_key": "%(env:STRIPE_PUBLISHABLE_KEY)%",
+    "webhook_secret": "%(env:STRIPE_WEBHOOK_SECRET)%",
+    "product_id": "prod_Ly0ZryjSmtq5g9",
+    "price_id": "price_1LG4YOAwATopFSWj2fz9dLjg"
+  }
+}
