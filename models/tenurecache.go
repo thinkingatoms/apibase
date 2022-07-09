@@ -41,17 +41,17 @@ type cache struct {
 	evictSize        int
 	expireAfterRead  time.Duration
 	expireAfterWrite time.Duration
-	items            map[string]CacheItem
+	items            map[any]CacheItem
 	mu               sync.RWMutex
 	ih               *keyHeap
-	ihKeys           map[string]bool
-	onEvicted        func(string, any)
+	ihKeys           map[any]bool
+	onEvicted        func(any, any)
 	janitor          *janitor
 	hit              int64
 	miss             int64
 }
 
-func (c *cache) Set(k string, x any) {
+func (c *cache) Set(k any, x any) {
 	// "Inlining" of set
 	var e int64
 	var ke *keyAndExpiration
@@ -105,7 +105,7 @@ func (c *cache) evict(num int) {
 	}
 }
 
-func (c *cache) Get(k string) (any, bool) {
+func (c *cache) Get(k any) (any, bool) {
 	var e int64
 	if c.expireAfterRead == NoCacheExpiration {
 		if c.maxSize == 0 {
@@ -149,7 +149,7 @@ func (c *cache) Get(k string) (any, bool) {
 }
 
 // Delete an item from the cache. Does nothing if the key is not in the cache.
-func (c *cache) Delete(k string) {
+func (c *cache) Delete(k any) {
 	c.mu.Lock()
 	v, evicted := c.delete(k)
 	c.mu.Unlock()
@@ -159,7 +159,7 @@ func (c *cache) Delete(k string) {
 }
 
 type keyAndValue struct {
-	key   string
+	key   any
 	value any
 }
 
@@ -189,7 +189,7 @@ func (c *cache) DeleteExpired() {
 	}
 }
 
-func (c *cache) delete(k string) (any, bool) {
+func (c *cache) delete(k any) (any, bool) {
 	if c.onEvicted != nil {
 		if v, found := c.items[k]; found {
 			delete(c.items, k)
@@ -202,16 +202,16 @@ func (c *cache) delete(k string) (any, bool) {
 	return nil, false
 }
 
-func (c *cache) OnEvicted(f func(string, any)) {
+func (c *cache) OnEvicted(f func(any, any)) {
 	c.mu.Lock()
 	c.onEvicted = f
 	c.mu.Unlock()
 }
 
-func (c *cache) Items() map[string]any {
+func (c *cache) Items() map[any]any {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	m := make(map[string]any, len(c.items))
+	m := make(map[any]any, len(c.items))
 	now := time.Now().UnixNano()
 	for k, v := range c.items {
 		// "Inlining" of Expired
@@ -235,8 +235,8 @@ func (c *cache) Count() int {
 func (c *cache) Clear() {
 	c.mu.Lock()
 	items := c.items
-	c.items = make(map[string]CacheItem)
-	c.ihKeys = make(map[string]bool)
+	c.items = make(map[any]CacheItem)
+	c.ihKeys = make(map[any]bool)
 	c.ih = &keyHeap{}
 	if c.onEvicted != nil {
 		for k, v := range items {
@@ -257,7 +257,7 @@ func (c *cache) Info() map[string]int64 {
 }
 
 type keyAndExpiration struct {
-	Key        string
+	Key        any
 	Expiration int64
 }
 
@@ -428,9 +428,9 @@ func NewCache(ctx context.Context,
 		evictSize:        evictSize,
 		expireAfterRead:  expireAfterRead,
 		expireAfterWrite: expireAfterWrite,
-		items:            make(map[string]CacheItem),
+		items:            make(map[any]CacheItem),
 		ih:               &keyHeap{},
-		ihKeys:           make(map[string]bool),
+		ihKeys:           make(map[any]bool),
 		janitor:          &janitor{stop: make(chan bool), interval: cleanInterval},
 	}
 	ret := &Cache{c}
