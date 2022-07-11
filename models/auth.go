@@ -795,7 +795,8 @@ func (self *PhoneCode) GetPhone() (string, error) {
 }
 
 func (self *AuthDbImpl) CreatePhoneCode(ctx context.Context, phone, ipAddress string) (string, error) {
-	sql := `SELECT sum(fail_count) FROM auth.auth_code WHERE auth_method = 'phone' AND ip_address = $1`
+	sql := `SELECT coalesce(sum(fail_count), 0)
+FROM auth.auth_code WHERE auth_method = 'phone' AND ip_address = $1`
 	var count int
 	err := self.db.QueryRow(ctx, sql, ipAddress).Scan(&count)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -808,7 +809,7 @@ func (self *AuthDbImpl) CreatePhoneCode(ctx context.Context, phone, ipAddress st
 VALUES ('phone', $1, $2, $3, $4) ON CONFLICT (auth_method, auth_id) DO UPDATE
 SET code = $2, expiration_ts = $3, ip_address = $4, last_updated = current_timestamp`
 	code := ez.RandIntSeq(6)
-	_, err = self.db.Exec(ctx, sql, phone, code, time.Now().Add(time.Minute*5), ipAddress)
+	_, err = self.db.Exec(ctx, sql, phone, HashPassword(code), time.Now().Add(time.Minute*5), ipAddress)
 	if err != nil {
 		return "", err
 	}
@@ -820,19 +821,20 @@ func (self *AuthDbImpl) CheckPhoneCode(ctx context.Context, pa *PhoneCode) (JWTP
 	if err != nil {
 		return nil, err
 	}
-	sql := `SELECT expiration_ts FROM auth.auth_code
-WHERE auth_method = 'phone' AND auth_value = $1 AND code = $2`
+	sql := `SELECT code, expiration_ts FROM auth.auth_code
+WHERE auth_method = 'phone' AND auth_id = $1`
+	var hashedCode string
 	var expirationTs time.Time
-	err = self.db.QueryRow(ctx, sql, phone, pa.Code).Scan(&expirationTs)
+	err = self.db.QueryRow(ctx, sql, phone).Scan(&hashedCode, &expirationTs)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, errors.New("invalid phone/code")
 	} else if err != nil {
 		return nil, err
-	} else if expirationTs.Before(time.Now()) {
+	} else if expirationTs.Before(time.Now()) || !CheckPassword(hashedCode, pa.Code) {
 		return nil, errors.New("invalid code")
 	}
-	sql = `SELECT eu.email FROM eu.end_user eu JOIN auth.auth_user au ON eu.entity_id = au.user_id
-JOIN entity_status es ON eu.entity_status_id = es.entity_status_id
+	sql = `SELECT eu.email FROM auth.end_user eu JOIN auth.auth_user au ON eu.entity_id = au.user_id
+JOIN auth.entity_status es ON eu.entity_status_id = es.entity_status_id
 WHERE au.auth_method = 'phone' AND au.hashed_validation = $1 AND es.status_name = $2`
 	var email string
 	err = self.db.QueryRow(ctx, sql, phone, string(UserStatusVerified)).Scan(&email)
