@@ -151,3 +151,21 @@ $$
 $$
 language 'sql'
 ;
+---TABLE auth_code
+drop table if exists auth_code cascade
+;
+create table if not exists auth_code (
+  auth_code_id bigserial not null primary key,
+  auth_method text not null,
+  auth_id text not null,
+  code text not null,
+  expiration_ts timestamptz not null,
+  ip_address text not null,
+  fail_count int not null default 0,
+  last_updated timestamptz not null default current_timestamp
+)
+;
+create unique index idx_phone_code_uniq on auth_code (auth_method, auth_id)
+;
+create index idx_phone_code_ip on auth_code (ip_address)
+;

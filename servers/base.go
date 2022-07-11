@@ -10,7 +10,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
-	"github.com/gofrs/uuid"
 	"github.com/gorilla/handlers"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/rs/zerolog"
@@ -36,13 +35,12 @@ type Server struct {
 	db        models.DbConn
 	cache     *models.TenureCache
 
-	Name      string    `json:"name"`
-	Seed      string    `json:"seed"`
-	Port      int       `json:"port"`
-	Public    string    `json:"public"`
-	DbURL     string    `json:"db_url"`
-	Secret    string    `json:"secret"`
-	Namespace uuid.UUID `json:"namespace,omitempty"`
+	Name   string `json:"name"`
+	Seed   string `json:"seed"`
+	Port   int    `json:"port"`
+	Public string `json:"public"`
+	DbURL  string `json:"db_url"`
+	Secret string `json:"secret"`
 
 	secret []byte
 	config map[string]any
@@ -102,7 +100,6 @@ func (self *Server) LoadConfig(configPaths *[]string) {
 	} else {
 		rand.Seed(int64(ez.ReturnOrPanic(strconv.Atoi(self.Seed))))
 	}
-	self.Namespace = uuid.NewV5(uuid.Nil, self.Name)
 	self.Secret, self.secret = "", []byte(self.Secret)
 	ctx := context.Background()
 	if self.DbURL != "" {

@@ -6,7 +6,6 @@ package servers
 
 import (
 	"github.com/go-chi/chi/v5"
-	"github.com/gofrs/uuid"
 	"github.com/stripe/stripe-go/v72"
 	"github.com/stripe/stripe-go/v72/checkout/session"
 	"github.com/stripe/stripe-go/v72/webhook"
@@ -18,11 +17,10 @@ import (
 )
 
 type stripeService struct {
-	name      string
-	server    *Server
-	namespace uuid.UUID
-	db        models.DbConn
-	auth      models.Auth
+	name   string
+	server *Server
+	db     models.DbConn
+	auth   models.Auth
 
 	SecretKey      string `json:"secret_key"`
 	PublishableKey string `json:"publishable_key"`
@@ -43,11 +41,10 @@ func CreateStripeService(server *Server, auth models.Auth) (*stripeService, erro
 		return nil, nil
 	}
 	s := stripeService{
-		name:      name,
-		server:    server,
-		namespace: uuid.NewV5(server.Namespace, name),
-		db:        db,
-		auth:      auth,
+		name:   name,
+		server: server,
+		db:     db,
+		auth:   auth,
 	}
 	ez.PanicIfErr(ez.MapToObject(server.GetSubConfig(name), &s))
 	if s.SecretKey == "" || s.PublishableKey == "" {

@@ -82,7 +82,7 @@ END;
 $$
 LANGUAGE 'plpgsql'
 ;
-DROP TRIGGER IF EXISTS entity_status_audit ON entity_status;
+DROP TRIGGER IF EXISTS entity_status_audit ON entity_status
 ;
 CREATE TRIGGER entity_status_audit
 AFTER INSERT OR UPDATE OR DELETE ON entity_status
@@ -161,7 +161,7 @@ END;
 $$
 LANGUAGE 'plpgsql'
 ;
-DROP TRIGGER IF EXISTS entity_audit ON entity;
+DROP TRIGGER IF EXISTS entity_audit ON entity
 ;
 CREATE TRIGGER entity_audit
 AFTER INSERT OR UPDATE OR DELETE ON entity
@@ -239,7 +239,7 @@ END;
 $$
 LANGUAGE 'plpgsql'
 ;
-DROP TRIGGER IF EXISTS end_user_audit ON end_user;
+DROP TRIGGER IF EXISTS end_user_audit ON end_user
 ;
 CREATE TRIGGER end_user_audit
 AFTER INSERT OR UPDATE OR DELETE ON end_user
@@ -323,7 +323,7 @@ END;
 $$
 LANGUAGE 'plpgsql'
 ;
-DROP TRIGGER IF EXISTS auth_user_audit ON auth_user;
+DROP TRIGGER IF EXISTS auth_user_audit ON auth_user
 ;
 CREATE TRIGGER auth_user_audit
 AFTER INSERT OR UPDATE OR DELETE ON auth_user
@@ -398,7 +398,7 @@ END;
 $$
 LANGUAGE 'plpgsql'
 ;
-DROP TRIGGER IF EXISTS auth_role_audit ON auth_role;
+DROP TRIGGER IF EXISTS auth_role_audit ON auth_role
 ;
 CREATE TRIGGER auth_role_audit
 AFTER INSERT OR UPDATE OR DELETE ON auth_role
@@ -477,7 +477,7 @@ END;
 $$
 LANGUAGE 'plpgsql'
 ;
-DROP TRIGGER IF EXISTS entitlement_audit ON entitlement;
+DROP TRIGGER IF EXISTS entitlement_audit ON entitlement
 ;
 CREATE TRIGGER entitlement_audit
 AFTER INSERT OR UPDATE OR DELETE ON entitlement
@@ -523,4 +523,28 @@ language 'sql'
 GRANT EXECUTE ON FUNCTION f_create_auth_session(text, uuid, timestamptz) TO readwrite
 ;
 GRANT EXECUTE ON FUNCTION f_create_auth_session(text, uuid, timestamptz) TO readonly
+;
+---TABLE auth_code
+drop table if exists auth_code cascade
+;
+create table if not exists auth_code (
+auth_code_id bigserial not null primary key,
+auth_method text not null,
+auth_id text not null,
+code text not null,
+expiration_ts timestamptz not null,
+ip_address text not null,
+fail_count int not null default 0,
+last_updated timestamptz not null default current_timestamp
+)
+;
+create unique index idx_phone_code_uniq on auth_code (auth_method, auth_id)
+;
+create index idx_phone_code_ip on auth_code (ip_address)
+;
+GRANT SELECT ON auth_code TO readonly
+;
+GRANT SELECT, INSERT, UPDATE, DELETE, TRIGGER ON auth_code TO readwrite
+;
+GRANT ALL ON SEQUENCE auth_code_auth_code_id_seq TO readwrite
 ;

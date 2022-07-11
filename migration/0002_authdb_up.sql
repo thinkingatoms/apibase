@@ -484,3 +484,25 @@ GRANT EXECUTE ON FUNCTION f_create_auth_session(text, uuid, timestamptz) TO read
 ;
 GRANT EXECUTE ON FUNCTION f_create_auth_session(text, uuid, timestamptz) TO readonly
 ;
+---TABLE auth_code
+create table if not exists auth_code (
+auth_code_id bigserial not null primary key,
+auth_method text not null,
+auth_id text not null,
+code text not null,
+expiration_ts timestamptz not null,
+ip_address text not null,
+fail_count int not null default 0,
+last_updated timestamptz not null default current_timestamp
+)
+;
+create unique index idx_phone_code_uniq on auth_code (auth_method, auth_id)
+;
+create index idx_phone_code_ip on auth_code (ip_address)
+;
+GRANT SELECT ON auth_code TO readonly
+;
+GRANT SELECT, INSERT, UPDATE, DELETE, TRIGGER ON auth_code TO readwrite
+;
+GRANT ALL ON SEQUENCE auth_code_auth_code_id_seq TO readwrite
+;

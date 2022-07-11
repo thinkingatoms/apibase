@@ -23,6 +23,35 @@ const defaultRefreshExpiry = 86400 * 30
 const defaultSessionExpiry = 3600 * 24
 const defaultAccessExpiry = 3600
 const defaultFailCountExpiry = 3600 * 5
+const maxFailCount = 10
+
+func GetAccessToken(r *http.Request) (string, error) {
+	cookie, err := r.Cookie("accessToken")
+	if errors.Is(err, http.ErrNoCookie) {
+		bearer := r.Header.Get("Authorization")
+		if bearer == "" {
+			return "", errors.New("no authorization header")
+		}
+		parts := strings.Split(bearer, "Bearer")
+		if len(parts) != 2 || parts[1] == "" {
+			return "", errors.New("invalid authorization header")
+		}
+		return strings.TrimSpace(parts[1]), nil
+	} else {
+		return cookie.Value, nil
+	}
+}
+
+func HashPassword(password string) string {
+	return string(ez.ReturnOrPanic(bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)))
+}
+
+func CheckPassword(hash, password string) bool {
+	if hash == password {
+		return true
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+}
 
 type JWTPayload interface {
 	GetID() string
@@ -62,6 +91,8 @@ type Auth interface {
 	GetProfile(context.Context, string) (*Profile, error)
 	Logout(context.Context, JWTPayload) (bool, error)
 	CleanAuthSessions(context.Context) error
+	CreatePhoneCode(context.Context, string, string) (string, error)
+	CheckPhoneCode(context.Context, *PhoneCode) (JWTPayload, error)
 
 	// handler helpers
 
@@ -232,8 +263,7 @@ func (self *SimpleJWTTransformer) PutPayloadInRefresh(token *jwt.Token, payload 
 type AuthDbImpl struct {
 	JWTIssuer
 
-	namespace uuid.UUID
-	db        DbConn
+	db DbConn
 
 	MaxAge          int                          `json:"max_age"`
 	Providers       map[string]map[string]string `json:"providers"`
@@ -253,14 +283,12 @@ func NewJWTIssuer(secretGetter func() []byte) JWTIssuer {
 }
 
 func AuthFromConfig(
-	namespace uuid.UUID,
 	db DbConn,
 	config map[string]any,
 	secretGetter func() []byte,
 ) Auth {
 	s := AuthDbImpl{
 		JWTIssuer: NewJWTIssuer(secretGetter),
-		namespace: namespace,
 		db:        db,
 	}
 	ez.PanicIfErr(ez.MapToObject(config, &s))
@@ -413,7 +441,7 @@ WHERE eu.email = $1`
 }
 
 func (self *AuthDbImpl) GenerateRandomUUID() uuid.UUID {
-	return uuid.NewV5(self.namespace, ez.RandSeq(32))
+	return uuid.NewV5(uuid.Nil, ez.RandSeq(32))
 }
 
 func (self *AuthDbImpl) CheckRefresh(ctx context.Context, id string, token string) (JWTPayload, error) {
@@ -536,7 +564,6 @@ type AuthUser struct {
 	AuthMethod       string
 	Validation       string
 	HashedValidation string
-	Token            string
 }
 
 type UserStatus string
@@ -557,7 +584,7 @@ func (self *AuthDbImpl) CreateUser(ctx context.Context, cred *Login) (JWTPayload
 	cred.Email = strings.TrimSpace(strings.ToLower(cred.Email))
 	u := &AuthUser{
 		EntityType:       UserEntityType,
-		EntityUUID:       uuid.NewV5(self.namespace, ez.RandSeq(64)),
+		EntityUUID:       uuid.NewV5(uuid.Nil, ez.RandSeq(64)),
 		DisplayName:      strings.TrimSpace(cred.Name),
 		EntityStatus:     UserStatusUnverified,
 		Email:            cred.Email,
@@ -696,17 +723,6 @@ WHERE entity_id = $1`
 	}
 }
 
-func HashPassword(password string) string {
-	return string(ez.ReturnOrPanic(bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)))
-}
-
-func CheckPassword(hash, password string) bool {
-	if hash == password {
-		return true
-	}
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
-}
-
 func (self *AuthDbImpl) Logout(ctx context.Context, p JWTPayload) (bool, error) {
 	sql := `DELETE FROM auth.auth_session s
 WHERE s.entity_id = $1
@@ -758,19 +774,81 @@ func (self *AuthDbImpl) IsLoggedIn(handler http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-func GetAccessToken(r *http.Request) (string, error) {
-	cookie, err := r.Cookie("accessToken")
-	if errors.Is(err, http.ErrNoCookie) {
-		bearer := r.Header.Get("Authorization")
-		if bearer == "" {
-			return "", errors.New("no authorization header")
-		}
-		parts := strings.Split(bearer, "Bearer")
-		if len(parts) != 2 || parts[1] == "" {
-			return "", errors.New("invalid authorization header")
-		}
-		return strings.TrimSpace(parts[1]), nil
-	} else {
-		return cookie.Value, nil
+type PhoneCode struct {
+	Phone string `json:"phone,omitempty"`
+	Code  string `json:"code,omitempty"`
+}
+
+func (self *PhoneCode) GetPhone() (string, error) {
+	phone := self.Phone
+	phone = strings.ReplaceAll(phone, "-", "")
+	phone = strings.ReplaceAll(phone, "(", "")
+	phone = strings.ReplaceAll(phone, ")", "")
+	phone = strings.ReplaceAll(phone, "+", "")
+	if _, err := strconv.ParseInt(phone, 10, 64); err != nil {
+		return "", err
 	}
+	if len(phone) < 9 {
+		return "", errors.New("phone number too small")
+	}
+	return phone, nil
+}
+
+func (self *AuthDbImpl) CreatePhoneCode(ctx context.Context, phone, ipAddress string) (string, error) {
+	sql := `SELECT sum(fail_count) FROM auth.auth_code WHERE auth_method = 'phone' AND ip_address = $1`
+	var count int
+	err := self.db.QueryRow(ctx, sql, ipAddress).Scan(&count)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", err
+	}
+	if count > maxFailCount {
+		return "", errors.New("too many failed attempts")
+	}
+	sql = `INSERT INTO auth.auth_code (auth_method, auth_id, code, expiration_ts, ip_address)
+VALUES ('phone', $1, $2, $3, $4) ON CONFLICT (auth_method, auth_id) DO UPDATE
+SET code = $2, expiration_ts = $3, ip_address = $4, last_updated = current_timestamp`
+	code := ez.RandIntSeq(6)
+	_, err = self.db.Exec(ctx, sql, phone, code, time.Now().Add(time.Minute*5), ipAddress)
+	if err != nil {
+		return "", err
+	}
+	return code, nil
+}
+
+func (self *AuthDbImpl) CheckPhoneCode(ctx context.Context, pa *PhoneCode) (JWTPayload, error) {
+	phone, err := pa.GetPhone()
+	if err != nil {
+		return nil, err
+	}
+	sql := `SELECT expiration_ts FROM auth.auth_code
+WHERE auth_method = 'phone' AND auth_value = $1 AND code = $2`
+	var expirationTs time.Time
+	err = self.db.QueryRow(ctx, sql, phone, pa.Code).Scan(&expirationTs)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, errors.New("invalid phone/code")
+	} else if err != nil {
+		return nil, err
+	} else if expirationTs.Before(time.Now()) {
+		return nil, errors.New("invalid code")
+	}
+	sql = `SELECT eu.email FROM eu.end_user eu JOIN auth.auth_user au ON eu.entity_id = au.user_id
+JOIN entity_status es ON eu.entity_status_id = es.entity_status_id
+WHERE au.auth_method = 'phone' AND au.hashed_validation = $1 AND es.status_name = $2`
+	var email string
+	err = self.db.QueryRow(ctx, sql, phone, string(UserStatusVerified)).Scan(&email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		email = phone + "@phone"
+		u := &AuthUser{
+			EntityType:       UserEntityType,
+			EntityUUID:       uuid.NewV5(uuid.Nil, ez.RandSeq(64)),
+			EntityStatus:     UserStatusVerified,
+			Email:            email,
+			AuthMethod:       "phone",
+			HashedValidation: phone,
+		}
+		return self.UpsertUser(ctx, u, true)
+	} else if err != nil {
+		return nil, err
+	}
+	return self.CreatePayload(ctx, email)
 }
