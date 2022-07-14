@@ -4,6 +4,12 @@
   "secret": "%(env:APP_SECRET)%",
   "public": "http://localhost:3000",
   "db_url": "postgres://api:%(env:DB_SECRET)%@db/app",
+  "sms": {
+    "account_id": "%(env:TWILIO_ACCOUNT_ID)%",
+    "auth_token": "%(env:TWILIO_AUTH_TOKEN)%",
+    "from": "%(env:TWILIO_FROM)%",
+    "service_sid": "%(env:TWILIO_SERVICE_SID)%"
+  },
   "cache": {
     "long_expiry": 86400,
     "medium_expiry": 3600,
