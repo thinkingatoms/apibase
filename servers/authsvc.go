@@ -101,7 +101,7 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 		r.Post("/phone", self.phoneHandler)
 		r.Post("/generate-phone", self.createPhoneHandler)
 		r.Post("/client", self.clientHandler)
-		r.Post("/generate-client", self.auth.IsAdmin(self.createClientHandler))
+		r.Post("/generate-client", self.auth.IsLoggedIn(self.createClientHandler))
 
 		r.Post("/signup", self.signupHandler)
 		r.Post("/login", self.loginHandler)
@@ -109,6 +109,7 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 		// retrieve user profile
 		r.Get("/profile", self.auth.IsLoggedIn(self.profileHandler))
 
+		r.Post("/oauth", self.oauthHandler)
 		cred := self.auth.GetOauthProviderCred("google")
 		if cred != nil {
 			goth.UseProviders(
@@ -294,14 +295,68 @@ func (self *authService) oauthCallback(provider string) http.HandlerFunc {
 	}
 }
 
-func (self *authService) createClientHandler(w http.ResponseWriter, r *http.Request) {
-	var o string
+type oauthUser struct {
+	AuthMethod     string `json:"auth_method"`
+	IdToken        string `json:"id_token"`
+	AccessToken    string `json:"access_token"`
+	ServerAuthCode string `json:"server_auth_code"`
+}
+
+func (self *authService) oauthHandler(w http.ResponseWriter, r *http.Request) {
+	var o oauthUser
 	err := json.NewDecoder(r.Body).Decode(&o)
 	if err != nil {
 		ez.InternalServerErrorHandler(w, r, err)
 		return
 	}
-	ez.DoOr500(w, r, ez.WriteObjectAsJSON)(self.auth.CreateClientCred(r.Context(), o))
+	var user goth.User
+	var userStatus models.UserStatus
+	switch o.AuthMethod {
+	case "google":
+		sess := google.Session{
+			AccessToken: o.AccessToken,
+			IDToken:     o.IdToken,
+		}
+		provider, err := goth.GetProvider("google")
+		if err != nil {
+			ez.InternalServerErrorHandler(w, r, err)
+			return
+		}
+		user, err = provider.FetchUser(&sess)
+		if err != nil {
+			ez.InternalServerErrorHandler(w, r, err)
+			return
+		}
+		if v, ok := user.RawData["verified_email"]; ok && v.(bool) {
+			userStatus = models.UserStatusVerified
+		} else {
+			err = errors.New("unverified per " + provider.Name())
+			ez.AccessDeniedHandler(w, r, err)
+			return
+		}
+	default:
+		ez.BadRequestHandler(w, r, errors.New(fmt.Sprintf("unsupported oauth provider: %+v", o)))
+		return
+	}
+	u := &models.AuthUser{
+		EntityType:       models.UserEntityType,
+		EntityUUID:       self.auth.GenerateRandomUUID(),
+		DisplayName:      strings.TrimSpace(user.Name),
+		EntityStatus:     userStatus,
+		Email:            strings.TrimSpace(strings.ToLower(user.Email)),
+		AuthMethod:       o.AuthMethod,
+		Validation:       user.UserID,
+		HashedValidation: user.UserID,
+		Details:          user.RawData,
+	}
+	ctx := r.Context()
+	ez.DoOr500(w, r, self.payloadHandler)(self.auth.UpsertUser(ctx, u, false))
+}
+
+func (self *authService) createClientHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	payload := ctx.Value(models.RequestAuthKey).(models.JWTPayload)
+	ez.DoOr500(w, r, ez.WriteObjectAsJSON)(self.auth.CreateClientCred(r.Context(), payload.GetID()))
 }
 
 func (self *authService) clientHandler(w http.ResponseWriter, r *http.Request) {
@@ -347,12 +402,12 @@ func (self *authService) refreshTokenHandler(w http.ResponseWriter, r *http.Requ
 
 func (self *authService) logoutHandler(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
-		Name:    "accessToken",
+		Name:    "access_token",
 		Value:   "",
 		Expires: time.Unix(0, 0),
 	})
 	http.SetCookie(w, &http.Cookie{
-		Name:    "refreshToken",
+		Name:    "refresh_token",
 		Value:   "",
 		Expires: time.Unix(0, 0),
 	})
@@ -377,7 +432,7 @@ func (self *authService) payloadHandler(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:  "accessToken",
+		Name:  "access_token",
 		Value: accessToken,
 	})
 	var refreshToken string
@@ -387,15 +442,15 @@ func (self *authService) payloadHandler(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:  "refreshToken",
+		Name:  "refresh_token",
 		Value: refreshToken,
 	})
 	ez.WriteObjectAsJSON(w, r, map[string]string{
-		"id":           payload.GetID(),
-		"session":      payload.GetSession(),
-		"roles":        payload.GetRoles(),
-		"accessToken":  accessToken,
-		"refreshToken": refreshToken,
+		"id":            payload.GetID(),
+		"session":       payload.GetSession(),
+		"roles":         payload.GetRoles(),
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 	})
 }
 

@@ -26,7 +26,7 @@ const defaultFailCountExpiry = 3600 * 5
 const maxFailCount = 10
 
 func GetAccessToken(r *http.Request) (string, error) {
-	cookie, err := r.Cookie("accessToken")
+	cookie, err := r.Cookie("access_token")
 	if errors.Is(err, http.ErrNoCookie) {
 		bearer := r.Header.Get("Authorization")
 		if bearer == "" {
@@ -462,15 +462,14 @@ type ClientCredential struct {
 	ClientSecret string `json:"client_secret"`
 }
 
-func (self *AuthDbImpl) CreateClientCred(ctx context.Context, email string) (*ClientCredential, error) {
-	sql := `SELECT eu.entity_id, u.entity_uuid, au.hashed_validation, au.details
+func (self *AuthDbImpl) CreateClientCred(ctx context.Context, id string) (*ClientCredential, error) {
+	sql := `SELECT eu.entity_uuid, coalesce(au.hashed_validation, ''), au.details
 FROM auth.end_user eu
 LEFT JOIN auth.auth_user au ON eu.entity_id = au.user_id
-WHERE eu.email = $1 AND au.auth_method = 'client'`
-	var id int64
+WHERE eu.entity_id = $1 AND au.auth_method = 'client'`
 	var entityUUID, password string
 	var details map[string]any
-	err := self.db.QueryRow(ctx, sql, email).Scan(&id, &entityUUID, &password, &details)
+	err := self.db.QueryRow(ctx, sql, id).Scan(&entityUUID, &password, &details)
 	if err != nil {
 		return nil, err
 	}
@@ -486,8 +485,8 @@ VALUES ($1, 'client', $2, $3) ON CONFLICT DO NOTHING RETURNING true`
 		if errors.Is(err, pgx.ErrNoRows) {
 			sql = `SELECT eu.entity_id, u.entity_uuid, au.hashed_validation, au.details
 FROM auth.end_user eu LEFT JOIN auth.auth_user au ON eu.entity_id = au.user_id
-WHERE eu.email = $1 AND au.auth_method = 'client'`
-			err = self.db.QueryRow(ctx, sql, email).Scan(&id, &entityUUID, &password, &details)
+WHERE eu.entity_id = $1 AND au.auth_method = 'client'`
+			err = self.db.QueryRow(ctx, sql, id).Scan(&id, &entityUUID, &password, &details)
 			if err != nil {
 				return nil, err
 			}

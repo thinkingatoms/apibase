@@ -274,8 +274,8 @@ func (self *APIClient) LoadToken() error {
 	if err != nil {
 		return err
 	}
-	self.accessToken = "Bearer " + ret["accessToken"].(string)
-	self.refreshToken = "Bearer " + ret["refreshToken"].(string)
+	self.accessToken = "Bearer " + ret["access_token"].(string)
+	self.refreshToken = "Bearer " + ret["refresh_token"].(string)
 	return nil
 }
 
@@ -297,8 +297,8 @@ func (self *APIClient) RefreshToken() error {
 			return err
 		}
 	}
-	self.accessToken = "Bearer " + ret["accessToken"].(string)
-	self.refreshToken = "Bearer " + ret["refreshToken"].(string)
+	self.accessToken = "Bearer " + ret["access_token"].(string)
+	self.refreshToken = "Bearer " + ret["refresh_token"].(string)
 	return nil
 }
 

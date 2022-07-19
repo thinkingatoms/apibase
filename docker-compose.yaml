@@ -10,6 +10,21 @@ services:
     ports:
       - "8000:80"
 
+  public:
+    container_name: public
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    command: >
+      /appserver static --port=80
+      -m /:/public
+    ports:
+      - "4000:80"
+    volumes:
+      - type: bind
+        source: /home/tom/dev/thinkingatoms/flutter/portfolio/build/web
+        target: /public
+
   app:
     container_name: app
     build:

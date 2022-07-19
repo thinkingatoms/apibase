@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 	"github.com/gorilla/handlers"
 	"github.com/jackc/pgx/v4/pgxpool"
@@ -35,21 +36,20 @@ type Server struct {
 	db        models.DbConn
 	cache     *models.TenureCache
 
-	Name   string `json:"name"`
-	Seed   string `json:"seed"`
-	Port   int    `json:"port"`
-	Public string `json:"public"`
-	DbURL  string `json:"db_url"`
-	Secret string `json:"secret"`
+	Name        string `json:"name"`
+	Seed        string `json:"seed"`
+	Port        int    `json:"port"`
+	Public      string `json:"public"`
+	DbURL       string `json:"db_url"`
+	Secret      string `json:"secret"`
+	CorsOrigins string `json:"cors_origins"`
 
 	secret []byte
 	config map[string]any
 }
 
 func SetupRouter() *chi.Mux {
-	_log := zerolog.New(os.Stdout).With().
-		Timestamp().
-		Logger()
+	_log := zerolog.New(os.Stdout).With().Timestamp().Logger()
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -72,12 +72,36 @@ func SetupRouter() *chi.Mux {
 	return r
 }
 
-func NewServer() *Server {
-	return &Server{
+func NewServer(cors ...bool) *Server {
+	s := &Server{
 		Router:    SetupRouter(),
 		setups:    make([]func(ctx context.Context) error, 0),
 		teardowns: make([]func() error, 0),
 	}
+	if len(cors) > 0 && cors[0] {
+		s.UseCORS()
+	}
+	return s
+}
+
+func (self *Server) UseCORS() {
+	if self.CorsOrigins == "" {
+		self.CorsOrigins = "*"
+	}
+	origins := make([]string, 0)
+	for _, o := range strings.Split(self.CorsOrigins, ",") {
+		origins = append(origins, strings.TrimSpace(o))
+	}
+	c := cors.New(cors.Options{
+		AllowedOrigins: origins,
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Origin", "Accept", "Content-Type", "X-Amz-Date",
+			"Authorization", "X-Api-Key", "X-Amz-Security-Token", "locale"},
+		ExposedHeaders:   []string{"Link", "Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	})
+	self.Router.Use(c.Handler)
 }
 
 func (self *Server) GetSecret() []byte {
