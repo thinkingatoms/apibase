@@ -465,8 +465,8 @@ type ClientCredential struct {
 func (self *AuthDbImpl) CreateClientCred(ctx context.Context, id string) (*ClientCredential, error) {
 	sql := `SELECT eu.entity_uuid, coalesce(au.hashed_validation, ''), au.details
 FROM auth.end_user eu
-LEFT JOIN auth.auth_user au ON eu.entity_id = au.user_id
-WHERE eu.entity_id = $1 AND au.auth_method = 'client'`
+LEFT JOIN auth.auth_user au ON eu.entity_id = au.user_id AND au.auth_method = 'client'
+WHERE eu.entity_id = $1`
 	var entityUUID, password string
 	var details map[string]any
 	err := self.db.QueryRow(ctx, sql, id).Scan(&entityUUID, &password, &details)
