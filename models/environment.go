@@ -13,6 +13,12 @@ import (
 )
 
 //goland:noinspection GoSnakeCaseUsage
+const APP_NAME_KEY = DEFAULT_ROOT_NAME + "_NAME"
+
+//goland:noinspection GoSnakeCaseUsage
+const DEFAULT_APP_NAME string = ""
+
+//goland:noinspection GoSnakeCaseUsage
 const ENV_NAME_KEY = DEFAULT_ROOT_NAME + "_ENV_NAME"
 
 //goland:noinspection GoSnakeCaseUsage
@@ -368,14 +374,17 @@ func (_ *Environment) extractValue(v any, keys []string) (any, error) {
 	return ret, nil
 }
 
-func NewEnvironment(name string, rootURL string) *Environment {
+func NewEnvironment(name, env, rootURL string) *Environment {
 	httpClient := NewHTTPClient(rootURL, 20, 10, 10)
 	version := ez.ReturnOrPanic(httpClient.ToJSON(httpClient.Get("VERSION.json", nil)))
 	if version["name"].(string) != name {
 		panic("unexpected name " + name + " vs version name " + version["name"].(string))
 	}
+	if version["env"].(string) != env {
+		panic("unexpected env " + env + " vs version name " + version["env"].(string))
+	}
 	return &Environment{
-		name:       name,
+		name:       env,
 		httpClient: httpClient,
 	}
 }
@@ -384,15 +393,19 @@ var defaultEnvironment *Environment
 
 func DefaultEnvironment() *Environment {
 	if defaultEnvironment == nil {
-		name := os.Getenv(ENV_NAME_KEY)
+		name := os.Getenv(APP_NAME_KEY)
 		if name == "" {
-			name = DEFAULT_ENV_NAME
+			name = DEFAULT_APP_NAME
+		}
+		env := os.Getenv(ENV_NAME_KEY)
+		if env == "" {
+			env = DEFAULT_ENV_NAME
 		}
 		rootURL := os.Getenv(ENV_URL_KEY)
 		if rootURL == "" {
 			rootURL = DEFAULT_ENV_URL
 		}
-		defaultEnvironment = NewEnvironment(name, rootURL)
+		defaultEnvironment = NewEnvironment(name, env, rootURL)
 	}
 	return defaultEnvironment
 }
