@@ -376,7 +376,8 @@ func (_ *Environment) extractValue(v any, keys []string) (any, error) {
 
 func NewEnvironment(name, env, rootURL string) *Environment {
 	httpClient := NewHTTPClient(rootURL, 20, 10, 10)
-	version := ez.ReturnOrPanic(httpClient.ToJSON(httpClient.Get("VERSION.json", nil)))
+	versionURL := filepath.Join(env, "VERSION.json")
+	version := ez.ReturnOrPanic(httpClient.ToJSON(httpClient.Get(versionURL, nil)))
 	if version["name"].(string) != name {
 		panic("unexpected name " + name + " vs version name " + version["name"].(string))
 	}
