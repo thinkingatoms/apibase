@@ -84,6 +84,15 @@ func NewServer(cors ...bool) *Server {
 	return s
 }
 
+func (self *Server) GetPublicURL() string {
+	if self.Port == 80 {
+		return strings.ReplaceAll(self.Public, "https://", "http://")
+	} else if self.Port == 443 {
+		return strings.ReplaceAll(self.Public, "http://", "https://")
+	}
+	return self.Public + ":" + strconv.Itoa(self.Port)
+}
+
 func (self *Server) UseCORS() {
 	if self.CorsOrigins == "" {
 		self.CorsOrigins = "*"

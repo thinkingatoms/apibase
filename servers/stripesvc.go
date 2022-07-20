@@ -81,8 +81,8 @@ func (self *stripeService) createCheckoutHandler(w http.ResponseWriter, r *http.
 	payload := ctx.Value(models.RequestAuthKey).(models.JWTPayload)
 	id := payload.GetID()
 	params := &stripe.CheckoutSessionParams{
-		SuccessURL:        stripe.String(self.server.Public + "/stripe/complete?session_id={CHECKOUT_SESSION_ID}"),
-		CancelURL:         stripe.String(self.server.Public + "/stripe/cancel?session_id={CHECKOUT_SESSION_ID}"),
+		SuccessURL:        stripe.String(self.server.GetPublicURL() + "/stripe/complete?session_id={CHECKOUT_SESSION_ID}"),
+		CancelURL:         stripe.String(self.server.GetPublicURL() + "/stripe/cancel?session_id={CHECKOUT_SESSION_ID}"),
 		Mode:              stripe.String(string(stripe.CheckoutSessionModeSubscription)),
 		ClientReferenceID: &id,
 		LineItems: []*stripe.CheckoutSessionLineItemParams{

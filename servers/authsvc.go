@@ -116,7 +116,7 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 				google.New(
 					cred.ClientID,
 					cred.ClientSecret,
-					self.server.Public+pathPrefix+"/google/callback",
+					self.server.GetPublicURL()+pathPrefix+"/google/callback",
 					"email", "profile"),
 			)
 			r.Get("/google", self.oauthInit("google"))
@@ -128,7 +128,7 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 				linkedin.New(
 					cred.ClientID,
 					cred.ClientSecret,
-					self.server.Public+pathPrefix+"/linkedin/callback",
+					self.server.GetPublicURL()+pathPrefix+"/linkedin/callback",
 					"r_liteprofile", "r_emailaddress"),
 			)
 			r.Get("/linkedin", self.oauthInit("linkedin"))
