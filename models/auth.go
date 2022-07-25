@@ -22,8 +22,8 @@ import (
 const defaultRefreshExpiry = 86400 * 30
 const defaultSessionExpiry = 3600 * 24
 const defaultAccessExpiry = 3600
-const defaultFailCountExpiry = 3600 * 5
-const maxFailCount = 10
+const defaultFailCountExpiry = 3600
+const defaultMaxFailCount = 5
 
 func GetAccessToken(r *http.Request) (string, error) {
 	cookie, err := r.Cookie("access_token")
@@ -70,6 +70,8 @@ type JWTIssuer interface {
 	JWTKeyFunc(token *jwt.Token) (any, error)
 	CreateAccessToken(payload JWTPayload) (string, error)
 	CreateRefreshToken(JWTPayload) (string, error)
+	LoadJWT(*http.Request) (JWTPayload, error)
+	HasRole(JWTPayload, string) bool
 	IsValidJWT(http.HandlerFunc) http.HandlerFunc
 	ValidateJWT(http.Handler) http.Handler
 	IsAdmin(http.HandlerFunc) http.HandlerFunc
@@ -82,17 +84,21 @@ type Auth interface {
 	GenerateRandomUUID() uuid.UUID
 	GetOauthProviderCred(string) *ClientCredential
 	CreatePayload(context.Context, string) (JWTPayload, error)
-	CheckRefresh(ctx context.Context, id string, token string) (JWTPayload, error)
-	CreateClientCred(ctx context.Context, id string) (*ClientCredential, error)
-	CheckClientCred(ctx context.Context, cred *ClientCredential) (JWTPayload, error)
+	CheckRefresh(context.Context, string, string) (JWTPayload, error)
+	CreateClientCred(context.Context, string) (*ClientCredential, error)
+	CheckClientCred(context.Context, *ClientCredential) (JWTPayload, error)
+	CreateLogin(context.Context, *Login, string) (string, error)
 	CheckLogin(context.Context, *Login) (JWTPayload, error)
-	CreateUser(context.Context, *Login) (JWTPayload, error)
-	UpsertUser(context.Context, *AuthUser, bool) (JWTPayload, error)
+	UpsertUser(context.Context, *AuthUser, bool) (string, error)
 	GetProfile(context.Context, string) (*Profile, error)
 	Logout(context.Context, JWTPayload) (bool, error)
 	CleanAuthSessions(context.Context) error
-	CreatePhoneCode(context.Context, string, string) (string, error)
-	CheckPhoneCode(context.Context, *PhoneCode) (JWTPayload, error)
+	CreateAuthCode(context.Context, string, string, string, string, time.Duration) error
+	CheckAuthCode(context.Context, string, string, string) error
+	CheckPhone(context.Context, *PhoneCode) (JWTPayload, error)
+	CreateEmailVerification(context.Context, uuid.UUID, string) (string, error)
+	CheckEmailVerification(context.Context, string) (JWTPayload, error)
+	Message(context.Context, *AuthMessage) error
 
 	// handler helpers
 
@@ -156,43 +162,54 @@ func (self *SimpleJWTIssuer) JWTKeyFunc(token *jwt.Token) (any, error) {
 	return self.secretGetter(), nil
 }
 
+func (self *SimpleJWTIssuer) LoadJWT(r *http.Request) (JWTPayload, error) {
+	tokenString, err := GetAccessToken(r)
+	if err != nil {
+		return nil, err
+	}
+	var token *jwt.Token
+	token, err = jwt.Parse(tokenString, self.JWTKeyFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	if token.Valid {
+		payload, err := self.JWTTransformer.GetPayload(token)
+		if err != nil {
+			return nil, err
+		}
+		return payload, nil
+	}
+	return nil, errors.New("not authenticated")
+}
+
+func (self *SimpleJWTIssuer) HasRole(payload JWTPayload, role string) bool {
+	for _, r := range strings.Split(payload.GetRoles(), ",") {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
 func (self *SimpleJWTIssuer) IsValidJWT(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tokenString, err := GetAccessToken(r)
+		payload, err := self.LoadJWT(r)
 		if err != nil {
 			ez.AccessDeniedHandler(w, r, err)
 			return
 		}
-		var token *jwt.Token
-		token, err = jwt.Parse(tokenString, self.JWTKeyFunc)
-		if err != nil {
-			ez.AccessDeniedHandler(w, r, err)
-			return
-		}
-
-		if token.Valid {
-			payload, err := self.JWTTransformer.GetPayload(token)
-			if err != nil {
-				ez.InternalServerErrorHandler(w, r, err)
-				return
-			}
-			r = r.WithContext(context.WithValue(r.Context(), RequestAuthKey, payload))
-			handler.ServeHTTP(w, r)
-			return
-		}
-		err = errors.New("not authenticated")
-		ez.AccessDeniedHandler(w, r, err)
+		r = r.WithContext(context.WithValue(r.Context(), RequestAuthKey, payload))
+		handler.ServeHTTP(w, r)
 	}
 }
 
 func (self *SimpleJWTIssuer) IsAdmin(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		payload := r.Context().Value(RequestAuthKey).(JWTPayload)
-		for _, role := range strings.Split(payload.GetRoles(), ",") {
-			if role == "admin" {
-				handler.ServeHTTP(w, r)
-				return
-			}
+		if self.HasRole(payload, "admin") {
+			handler.ServeHTTP(w, r)
+			return
 		}
 		ez.AccessDeniedHandler(w, r, errors.New("not admin"))
 	}
@@ -270,6 +287,7 @@ type AuthDbImpl struct {
 	MaxFailCount    int                          `json:"max_fail_count"`
 	FailCountExpiry time.Duration                `json:"fail_count_expiry"`
 	SessionExpiry   time.Duration                `json:"session_expiry"`
+	AllowUnverified bool                         `json:"allow_unverified"`
 }
 
 func NewJWTIssuer(secretGetter func() []byte) JWTIssuer {
@@ -297,6 +315,9 @@ func AuthFromConfig(
 	}
 	if s.SessionExpiry == 0 {
 		s.SessionExpiry = defaultSessionExpiry
+	}
+	if s.MaxFailCount == 0 {
+		s.MaxFailCount = defaultMaxFailCount
 	}
 	return &s
 }
@@ -415,15 +436,20 @@ WHERE e.user_id = e.target_id
 const JWT_REFRESH = "__REFRESH__"
 
 func (self *AuthDbImpl) CreatePayload(ctx context.Context, email string) (JWTPayload, error) {
-	sql := `SELECT coalesce(string_agg(ar.role_name, ','), '') AS roles
+	sql := `SELECT es.status_name, coalesce(string_agg(ar.role_name, ','), '') AS roles
 FROM auth.end_user eu
+JOIN auth.entity_status es ON eu.entity_status_id = es.entity_status_id
 LEFT JOIN auth.entitlement e ON eu.entity_id = e.user_id AND e.target_id = e.user_id
 LEFT JOIN auth.auth_role ar ON e.role_id = ar.auth_role_id
-WHERE eu.email = $1`
+WHERE eu.email = $1 GROUP BY es.status_name`
+	var userStatus UserStatus
 	var roles string
-	err := self.db.QueryRow(ctx, sql, email).Scan(&roles)
+	err := self.db.QueryRow(ctx, sql, email).Scan(&userStatus, &roles)
 	if err != nil {
 		return nil, err
+	}
+	if !self.AllowUnverified && userStatus == UserStatusUnverified {
+		return nil, errors.New("unverified user")
 	}
 	var userID int64
 	sessionKey := self.GenerateRandomUUID().String()
@@ -579,7 +605,7 @@ const (
 	UserEntityType EntityType = "user"
 )
 
-func (self *AuthDbImpl) CreateUser(ctx context.Context, cred *Login) (JWTPayload, error) {
+func (self *AuthDbImpl) CreateLogin(ctx context.Context, cred *Login, ipAddress string) (string, error) {
 	cred.Email = strings.TrimSpace(strings.ToLower(cred.Email))
 	u := &AuthUser{
 		EntityType:       UserEntityType,
@@ -591,15 +617,17 @@ func (self *AuthDbImpl) CreateUser(ctx context.Context, cred *Login) (JWTPayload
 		Validation:       strings.TrimSpace(cred.Password),
 		HashedValidation: HashPassword(strings.TrimSpace(cred.Password)),
 	}
-	var err error
-	_, err = self.UpsertUser(ctx, u, true)
+	_, err := self.UpsertUser(ctx, u, true)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return self.CreatePayload(ctx, cred.Email)
+	return self.CreateEmailVerification(ctx, u.EntityUUID, ipAddress)
 }
 
-func (self *AuthDbImpl) UpsertUser(ctx context.Context, u *AuthUser, forceNew bool) (JWTPayload, error) {
+func (self *AuthDbImpl) UpsertUser(ctx context.Context, u *AuthUser, forceNew bool) (string, error) {
+	if !forceNew && u.EntityStatus != UserStatusVerified {
+		return "", errors.New("user is not verified")
+	}
 	sql := `SELECT eu.entity_id, eu.fail_count, eu.last_updated,
 es.status_name, au.hashed_validation, au.details
 FROM auth.end_user eu JOIN auth.entity_status es ON eu.entity_status_id = es.entity_status_id
@@ -632,21 +660,18 @@ SELECT entity_id, $6, $7, $8 FROM new_user RETURNING user_id`
 			u.EntityType, u.EntityUUID, u.DisplayName, u.Email, u.EntityStatus,
 			u.AuthMethod, u.HashedValidation, u.Details).Scan(&id)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
-		return self.CreatePayload(ctx, u.Email)
+		return u.Email, nil
 	} else if err != nil {
-		return nil, err
+		return "", err
 	}
 	if forceNew && id != 0 {
-		return nil, errors.New("invalid login")
+		return "", errors.New("invalid login")
 	}
 	checkTime := lastUpdated.Add(self.FailCountExpiry * time.Second)
 	if failCount > self.MaxFailCount && time.Now().Before(checkTime) {
-		return nil, errors.New("too many failed login attempts")
-	}
-	if entityStatus == UserStatusUnverified || u.EntityStatus == UserStatusUnverified {
-		return nil, errors.New("user is not verified")
+		return "", errors.New("too many failed login attempts")
 	}
 	if hashedValidation == nil {
 		var tmp bool
@@ -657,7 +682,7 @@ VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING true`
 			sql = `SELECT hashed_validation, details FROM auth.auth_user WHERE user_id = $1 AND auth_method = $2`
 			err = self.db.QueryRow(ctx, sql, id, u.AuthMethod).Scan(&hashedValidation, &details)
 		} else if err != nil {
-			return nil, err
+			return "", err
 		} else {
 			hashedValidation = &u.HashedValidation
 			details = &u.Details
@@ -665,8 +690,9 @@ VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING true`
 	}
 	if !CheckPassword(*hashedValidation, u.Validation) {
 		self.incFailCount(ctx, id)
-		return nil, errors.New("cannot validate login")
-	} else if failCount > 0 {
+		return "", errors.New("cannot validate login")
+	}
+	if failCount > 0 {
 		sql := `UPDATE auth.end_user SET fail_count = 0,
 last_updated = current_timestamp, last_updated_by = session_user
 WHERE entity_id = $1`
@@ -675,14 +701,23 @@ WHERE entity_id = $1`
 			log.Error().Msgf("failed to reset fail count: %s", err.Error())
 		}
 	}
+	if u.EntityStatus == UserStatusVerified && entityStatus == UserStatusUnverified {
+		sql := `UPDATE auth.end_user eu SET eu.entity_status_id = es.entity_status_id
+FROM auth.entity_status es WHERE es.entity_type = $1 AND es.status_name = $2
+AND eu.email = $3`
+		_, err = self.db.Exec(ctx, sql, id, u.EntityType, u.EntityStatus, u.Email)
+		if err != nil {
+			return "", err
+		}
+	}
 	if ez.SerializeMap(*details) != ez.SerializeMap(u.Details) {
 		sql = `UPDATE auth.auth_user SET details = $1 WHERE user_id = $2 AND auth_method = $3`
 		_, err = self.db.Exec(ctx, sql, u.Details, id, u.AuthMethod)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
 	}
-	return self.CreatePayload(ctx, u.Email)
+	return u.Email, nil
 }
 
 type Profile struct {
@@ -793,46 +828,69 @@ func (self *PhoneCode) GetPhone() (string, error) {
 	return phone, nil
 }
 
-func (self *AuthDbImpl) CreatePhoneCode(ctx context.Context, phone, ipAddress string) (string, error) {
-	sql := `SELECT coalesce(sum(fail_count), 0)
-FROM auth.auth_code WHERE auth_method = 'phone' AND ip_address = $1`
+func (self *AuthDbImpl) CreateAuthCode(ctx context.Context,
+	authMethod, authId, code, ipAddress string, duration time.Duration) error {
+	sql := `SELECT coalesce(sum(fail_count), 0) FROM auth.auth_code
+WHERE auth_method = $1 AND auth_id = $2`
 	var count int
-	err := self.db.QueryRow(ctx, sql, ipAddress).Scan(&count)
+	err := self.db.QueryRow(ctx, sql, authMethod, authId).Scan(&count)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return "", err
+		return err
 	}
-	if count > maxFailCount {
-		return "", errors.New("too many failed attempts")
+	if count > self.MaxFailCount {
+		return errors.New("too many failed attempts")
 	}
 	sql = `INSERT INTO auth.auth_code (auth_method, auth_id, code, expiration_ts, ip_address)
-VALUES ('phone', $1, $2, $3, $4) ON CONFLICT (auth_method, auth_id) DO UPDATE
-SET code = $2, expiration_ts = $3, ip_address = $4, last_updated = current_timestamp`
-	code := ez.RandIntSeq(6)
-	_, err = self.db.Exec(ctx, sql, phone, HashPassword(code), time.Now().Add(time.Minute*5), ipAddress)
+VALUES ($1, $2, $3, $4, $5) ON CONFLICT (auth_method, auth_id) DO UPDATE
+SET code = $3, expiration_ts = $4, ip_address = $5, last_updated = current_timestamp`
+	_, err = self.db.Exec(ctx, sql, authMethod, authId, HashPassword(code), time.Now().Add(duration), ipAddress)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return code, nil
+	return nil
 }
 
-func (self *AuthDbImpl) CheckPhoneCode(ctx context.Context, pa *PhoneCode) (JWTPayload, error) {
-	phone, err := pa.GetPhone()
+func (self *AuthDbImpl) CheckAuthCode(ctx context.Context, authMethod, authId, code string) error {
+	sql := `SELECT coalesce(sum(fail_count), 0) FROM auth.auth_code
+WHERE auth_method = $1 AND auth_id = $2`
+	var count int
+	err := self.db.QueryRow(ctx, sql, authMethod, authId).Scan(&count)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if count > self.MaxFailCount {
+		return errors.New("too many failed attempts")
+	}
+	sql = `SELECT code, expiration_ts FROM auth.auth_code
+WHERE auth_method = $1 AND auth_id = $2`
+	var hashedCode string
+	var expirationTs time.Time
+	err = self.db.QueryRow(ctx, sql, authMethod, authId).Scan(&hashedCode, &expirationTs)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("invalid code")
+	} else if err != nil {
+		return err
+	} else if expirationTs.Before(time.Now()) {
+		return errors.New("code expired")
+	} else if !CheckPassword(hashedCode, code) {
+		sql = `UPDATE auth.auth_code SET fail_count = fail_count + 1,
+last_updated = current_timestamp WHERE auth_method = $1 AND auth_id = $2`
+		_, _ = self.db.Exec(ctx, sql, authMethod, authId)
+		return errors.New("invalid code")
+	}
+	return err
+}
+
+func (self *AuthDbImpl) CheckPhone(ctx context.Context, pc *PhoneCode) (JWTPayload, error) {
+	phone, err := pc.GetPhone()
 	if err != nil {
 		return nil, err
 	}
-	sql := `SELECT code, expiration_ts FROM auth.auth_code
-WHERE auth_method = 'phone' AND auth_id = $1`
-	var hashedCode string
-	var expirationTs time.Time
-	err = self.db.QueryRow(ctx, sql, phone).Scan(&hashedCode, &expirationTs)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, errors.New("invalid phone/code")
-	} else if err != nil {
+	err = self.CheckAuthCode(ctx, "phone", phone, pc.Code)
+	if err != nil {
 		return nil, err
-	} else if expirationTs.Before(time.Now()) || !CheckPassword(hashedCode, pa.Code) {
-		return nil, errors.New("invalid code")
 	}
-	sql = `SELECT eu.email FROM auth.end_user eu JOIN auth.auth_user au ON eu.entity_id = au.user_id
+	sql := `SELECT eu.email FROM auth.end_user eu JOIN auth.auth_user au ON eu.entity_id = au.user_id
 JOIN auth.entity_status es ON eu.entity_status_id = es.entity_status_id
 WHERE au.auth_method = 'phone' AND au.hashed_validation = $1 AND es.status_name = $2`
 	var email string
@@ -845,11 +903,77 @@ WHERE au.auth_method = 'phone' AND au.hashed_validation = $1 AND es.status_name 
 			EntityStatus:     UserStatusVerified,
 			Email:            email,
 			AuthMethod:       "phone",
+			Validation:       phone,
 			HashedValidation: phone,
 		}
-		return self.UpsertUser(ctx, u, true)
+		email, err = self.UpsertUser(ctx, u, false)
+		if err != nil {
+			return nil, err
+		}
 	} else if err != nil {
 		return nil, err
 	}
+	sql = `DELETE FROM auth.auth_code WHERE auth_id = $1`
+	_, err = self.db.Exec(ctx, sql, phone)
 	return self.CreatePayload(ctx, email)
+}
+
+func (self *AuthDbImpl) CreateEmailVerification(ctx context.Context, entityUUID uuid.UUID, ipAddress string) (string, error) {
+	token := ez.HexUUID(uuid.NewV5(uuid.Nil, ez.RandSeq(64)))
+	var id = ez.HexUUID(entityUUID)
+	err := self.CreateAuthCode(ctx, "email", id, token, ipAddress, time.Hour)
+	if err != nil {
+		return "", err
+	}
+	return id + "--" + token, nil
+}
+
+func (self *AuthDbImpl) CheckEmailVerification(ctx context.Context, verificationCode string) (JWTPayload, error) {
+	id, token, found := strings.Cut(verificationCode, "--")
+	if !found {
+		return nil, errors.New("invalid verification code")
+	}
+	err := self.CheckAuthCode(ctx, "email", id, token)
+	if err != nil {
+		return nil, err
+	}
+	sql := `SELECT eu.email, es.status_name FROM auth.end_user eu
+JOIN auth.entity_status es ON eu.entity_status_id = es.entity_status_id
+WHERE eu.entity_uuid = $1`
+	var email string
+	var userStatus UserStatus
+	err = self.db.QueryRow(ctx, sql, id).Scan(&email, &userStatus)
+	if err != nil {
+		return nil, err
+	}
+	if userStatus == UserStatusUnverified {
+		sql := `UPDATE auth.end_user eu SET entity_status_id = es.entity_status_id
+FROM auth.entity_status es WHERE es.entity_type = $1 AND es.status_name = $2
+AND eu.email = $3`
+		_, err = self.db.Exec(ctx, sql, UserEntityType, UserStatusVerified, email)
+		if err != nil {
+			return nil, err
+		}
+	}
+	sql = `DELETE FROM auth.auth_code WHERE auth_id = $1`
+	_, err = self.db.Exec(ctx, sql, id)
+	return self.CreatePayload(ctx, email)
+}
+
+type AuthMessage struct {
+	ContactName string         `json:"name"`
+	Email       string         `json:"email"`
+	Subject     string         `json:"subject"`
+	Body        string         `json:"body"`
+	Details     map[string]any `json:"details,omitempty"`
+}
+
+func (self *AuthDbImpl) Message(ctx context.Context, msg *AuthMessage) error {
+	sql := `INSERT INTO auth.auth_message (contact_name, email, subject, body, details)
+VALUES ($1, $2, $3, $4, $5)`
+	_, err := self.db.Exec(ctx, sql, msg.ContactName, msg.Email, msg.Subject, msg.Body, msg.Details)
+	if err != nil {
+		return err
+	}
+	return nil
 }

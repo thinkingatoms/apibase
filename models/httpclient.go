@@ -330,6 +330,7 @@ func NewAPIClient(rootURL, accessURL, refreshURL, clientID, clientSecret string,
 		},
 	}
 }
+
 func APIClientFromConfig(config map[string]any) *APIClient {
 	var timeout, maxIdleConns, maxPerHost int
 	if v, ok := config["timeout"]; ok {

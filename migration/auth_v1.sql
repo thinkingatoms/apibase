@@ -165,7 +165,20 @@ create table if not exists auth_code (
   last_updated timestamptz not null default current_timestamp
 )
 ;
-create unique index idx_phone_code_uniq on auth_code (auth_method, auth_id)
+create unique index idx_auth_code_uniq on auth_code (auth_id, auth_method)
 ;
-create index idx_phone_code_ip on auth_code (ip_address)
+create index idx_auth_code_ip on auth_code (ip_address)
+;
+---TABLE auth_message
+drop table if exists auth_message cascade
+;
+create table if not exists auth_message (
+  auth_message_id bigserial not null primary key,
+  contact_name text not null,
+  email text not null,
+  subject text not null,
+  body text not null,
+  details jsonb null,
+  created_ts timestamptz not null default current_timestamp
+)
 ;

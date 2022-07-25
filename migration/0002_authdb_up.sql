@@ -496,13 +496,30 @@ fail_count int not null default 0,
 last_updated timestamptz not null default current_timestamp
 )
 ;
-create unique index idx_phone_code_uniq on auth_code (auth_method, auth_id)
+create unique index idx_auth_code_uniq on auth_code (auth_id, auth_method)
 ;
-create index idx_phone_code_ip on auth_code (ip_address)
+create index idx_auth_code_ip on auth_code (ip_address)
 ;
 GRANT SELECT ON auth_code TO readonly
 ;
 GRANT SELECT, INSERT, UPDATE, DELETE, TRIGGER ON auth_code TO readwrite
 ;
 GRANT ALL ON SEQUENCE auth_code_auth_code_id_seq TO readwrite
+;
+---TABLE auth_message
+create table if not exists auth_message (
+auth_message_id bigserial not null primary key,
+contact_name text not null,
+email text not null,
+subject text not null,
+body text not null,
+details jsonb null,
+created_ts timestamptz not null default current_timestamp
+)
+;
+GRANT SELECT ON auth_message TO readonly
+;
+GRANT SELECT, INSERT, UPDATE, DELETE, TRIGGER ON auth_message TO readwrite
+;
+GRANT ALL ON SEQUENCE auth_message_auth_message_id_seq TO readwrite
 ;

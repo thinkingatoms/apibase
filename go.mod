@@ -13,6 +13,7 @@ require (
 	github.com/gorilla/sessions v1.2.1
 	github.com/jackc/pgconn v1.12.1
 	github.com/jackc/pgx/v4 v4.16.1
+	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/markbates/goth v1.73.0
 	github.com/rs/zerolog v1.15.0
 	github.com/spf13/cobra v1.5.0

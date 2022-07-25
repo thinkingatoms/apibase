@@ -50,3 +50,6 @@ DROP FUNCTION IF EXISTS f_create_auth_session(text, uuid, timestamptz)
 ---TABLE auth_code
 drop table if exists auth_code cascade
 ;
+---TABLE auth_message
+drop table if exists auth_message cascade
+;

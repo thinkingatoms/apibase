@@ -2,13 +2,20 @@
   "name": "THINKINGATOMS",
   "port": 80,
   "secret": "%(env:APP_SECRET)%",
-  "public": "http://localhost:3000",
+  "public": "http://localhost",
   "db_url": "postgres://api:%(env:DB_SECRET)%@db/app",
   "sms": {
     "account_id": "%(env:TWILIO_ACCOUNT_ID)%",
     "auth_token": "%(env:TWILIO_AUTH_TOKEN)%",
     "from": "%(env:TWILIO_FROM)%",
     "service_sid": "%(env:TWILIO_SERVICE_SID)%"
+  },
+  "email": {
+    "from": "%(env:EMAIL_FROM)%",
+    "to": "%(env:EMAIL_TO)%",
+    "smtp_host": "%(env:EMAIL_HOST)%",
+    "smtp_user": "%(env:EMAIL_USER)%",
+    "smtp_password": "%(env:EMAIL_PASSWORD)%"
   },
   "cache": {
     "long_expiry": 86400,

@@ -24,10 +24,11 @@ import (
 )
 
 type authService struct {
-	server     *Server
-	auth       models.Auth
-	adminRoles map[string]bool
-	smsClient  *models.SMSClient
+	server      *Server
+	auth        models.Auth
+	adminRoles  map[string]bool
+	smsClient   *models.SMSClient
+	emailClient *models.EmailClient
 }
 
 func CreateAuth(server *Server) (models.Auth, error) {
@@ -55,6 +56,9 @@ func RegisterAuthService(server *Server, auth models.Auth, adminRoles string) {
 	}
 	if server.HasSubConfig("sms") {
 		s.smsClient = models.SMSFromConfig(server.GetSubConfig("sms"))
+	}
+	if server.HasSubConfig("email") {
+		s.emailClient = models.EmailClientFromConfig(server.GetSubConfig("email"))
 	}
 	s.EnrichRouter(server.Router)
 	server.AddSetup(s.Setup)
@@ -94,16 +98,17 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 			re.Post("/", self.addRoleHandler)
 			re.Delete("/", self.removeRoleHandler)
 		})
-		// reload entitlements
+		r.Post("/message", self.messageHandler)
 		// refresh JWT token
 		r.Get("/refresh", self.auth.IsLoggedIn(self.refreshTokenHandler))
 		// authenticate based on client_id/client_secret
-		r.Post("/phone", self.phoneHandler)
 		r.Post("/generate-phone", self.createPhoneHandler)
-		r.Post("/client", self.clientHandler)
+		r.Post("/phone", self.phoneHandler)
 		r.Post("/generate-client", self.auth.IsLoggedIn(self.createClientHandler))
+		r.Post("/client", self.clientHandler)
 
 		r.Post("/signup", self.signupHandler)
+		r.Get("/verify-email/{code}", self.emailHandler)
 		r.Post("/login", self.loginHandler)
 		r.Post("/logout", self.auth.IsValidJWT(self.logoutHandler))
 		// retrieve user profile
@@ -291,7 +296,13 @@ func (self *authService) oauthCallback(provider string) http.HandlerFunc {
 			Details:          user.RawData,
 		}
 		ctx := r.Context()
-		ez.DoOr500(w, r, self.payloadHandler)(self.auth.UpsertUser(ctx, u, false))
+		var email string
+		email, err = self.auth.UpsertUser(ctx, u, false)
+		if err != nil {
+			ez.AccessDeniedHandler(w, r, err)
+			return
+		}
+		ez.DoOr500(w, r, self.payloadHandler)(self.auth.CreatePayload(ctx, email))
 	}
 }
 
@@ -350,7 +361,13 @@ func (self *authService) oauthHandler(w http.ResponseWriter, r *http.Request) {
 		Details:          user.RawData,
 	}
 	ctx := r.Context()
-	ez.DoOr500(w, r, self.payloadHandler)(self.auth.UpsertUser(ctx, u, false))
+	var email string
+	email, err = self.auth.UpsertUser(ctx, u, false)
+	if err != nil {
+		ez.AccessDeniedHandler(w, r, err)
+		return
+	}
+	ez.DoOr500(w, r, self.payloadHandler)(self.auth.CreatePayload(ctx, email))
 }
 
 func (self *authService) createClientHandler(w http.ResponseWriter, r *http.Request) {
@@ -376,7 +393,26 @@ func (self *authService) signupHandler(w http.ResponseWriter, r *http.Request) {
 		ez.InternalServerErrorHandler(w, r, err)
 		return
 	}
-	ez.DoOr401(w, r, self.payloadHandler)(self.auth.CreateUser(r.Context(), &cred))
+	ctx := r.Context()
+	var verificationCode string
+	verificationCode, err = self.auth.CreateLogin(ctx, &cred, r.RemoteAddr)
+	if err != nil {
+		ez.AccessDeniedHandler(w, r, err)
+		return
+	}
+	err = self.sendVerificationEmail(ctx, cred.Email, verificationCode)
+	if err != nil {
+		ez.InternalServerErrorHandler(w, r, err)
+		return
+	}
+	ez.WriteBytes(w, r, ez.Bool2bytes(true))
+}
+
+func (self *authService) sendVerificationEmail(ctx context.Context, email, verificationCode string) error {
+	subject := "Verify your email"
+	body := fmt.Sprintf("Please verify your email by clicking the link below:\n\n%s/auth/v1/verify-email/%s\n\n",
+		self.server.GetPublicURL(), verificationCode)
+	return self.emailClient.Send(ctx, email, subject, body)
 }
 
 func (self *authService) loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -467,8 +503,21 @@ func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Reque
 		ez.BadRequestHandler(w, r, err)
 		return
 	}
-	var code string
-	code, err = self.auth.CreatePhoneCode(r.Context(), phone, r.RemoteAddr)
+	code := ez.RandIntSeq(6)
+	if o.Code != "" {
+		payload, err := self.auth.LoadJWT(r)
+		if err != nil {
+			ez.AccessDeniedHandler(w, r, errors.New("only admins can set code"))
+			return
+		}
+		if self.auth.HasRole(payload, "admin") {
+			code = o.Code
+		} else {
+			ez.AccessDeniedHandler(w, r, errors.New("only admins can set code"))
+			return
+		}
+	}
+	err = self.auth.CreateAuthCode(r.Context(), "phone", phone, code, r.RemoteAddr, time.Minute*5)
 	if err != nil {
 		ez.InternalServerErrorHandler(w, r, err)
 		return
@@ -489,5 +538,31 @@ func (self *authService) phoneHandler(w http.ResponseWriter, r *http.Request) {
 		ez.InternalServerErrorHandler(w, r, err)
 		return
 	}
-	ez.DoOr401(w, r, self.payloadHandler)(self.auth.CheckPhoneCode(r.Context(), &o))
+	ez.DoOr401(w, r, self.payloadHandler)(self.auth.CheckPhone(r.Context(), &o))
+}
+
+func (self *authService) messageHandler(w http.ResponseWriter, r *http.Request) {
+	var o models.AuthMessage
+	err := json.NewDecoder(r.Body).Decode(&o)
+	if err != nil {
+		ez.InternalServerErrorHandler(w, r, err)
+		return
+	}
+	err = self.auth.Message(r.Context(), &o)
+	if err != nil {
+		ez.InternalServerErrorHandler(w, r, err)
+		return
+	}
+	if self.emailClient != nil {
+		msg, err := json.Marshal(o)
+		if err == nil {
+			_ = self.emailClient.Send(r.Context(), "", "__message__", string(msg))
+		}
+	}
+	_, _ = w.Write(ez.Bool2bytes(true))
+}
+
+func (self *authService) emailHandler(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	ez.DoOr401(w, r, self.payloadHandler)(self.auth.CheckEmailVerification(r.Context(), code))
 }

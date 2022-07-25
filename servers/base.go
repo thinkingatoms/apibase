@@ -230,7 +230,7 @@ func (self *Server) Serve() {
 		})
 	}
 
-	log.Info().Msgf("############# web service started at %d / %s #############", self.Port, self.Public)
+	log.Info().Msgf("############# web service started at %s #############", self.GetPublicURL())
 	if err := g.Wait(); err != nil {
 		log.Fatal().Err(err).Msgf("web service shutdown failed: %s", err)
 	}
