@@ -82,4 +82,5 @@ func SerializeMap(m map[string]any) string {
 
 func _() {
 	_ = Us2Time
+	_ = Us2Int
 }

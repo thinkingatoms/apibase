@@ -13,25 +13,25 @@ import (
 )
 
 //goland:noinspection GoSnakeCaseUsage
-const APP_NAME_KEY = DEFAULT_ROOT_NAME + "_NAME"
+const APP_NAME_KEY = "APP_NAME"
 
 //goland:noinspection GoSnakeCaseUsage
 const DEFAULT_APP_NAME string = ""
 
 //goland:noinspection GoSnakeCaseUsage
-const ENV_NAME_KEY = DEFAULT_ROOT_NAME + "_ENV_NAME"
+const ENV_NAME_KEY = "APP_ENV_NAME"
 
 //goland:noinspection GoSnakeCaseUsage
 const DEFAULT_ENV_NAME string = ""
 
 //goland:noinspection GoSnakeCaseUsage
-const ENV_URL_KEY = DEFAULT_ROOT_NAME + "_ENV_ROOT_URL"
+const ENV_URL_KEY = "APP_ENV_ROOT_URL"
 
 //goland:noinspection GoSnakeCaseUsage
 const DEFAULT_ENV_URL string = "http://config"
 
 //goland:noinspection GoSnakeCaseUsage
-const APP_USER_KEY = DEFAULT_ROOT_NAME + "_USER"
+const APP_USER_KEY = "APP_USER"
 
 const chainSep = "."
 
