@@ -556,7 +556,12 @@ func (self *authService) messageHandler(w http.ResponseWriter, r *http.Request) 
 	if self.emailClient != nil {
 		msg, err := json.Marshal(o)
 		if err == nil {
-			_ = self.emailClient.Send(r.Context(), "", "__message__", string(msg))
+			err = self.emailClient.Send(r.Context(), "", "__message__", string(msg))
+			if err != nil {
+				log.Error().Err(err).Msgf("failed to email message: %+v", o)
+			}
+		} else {
+			log.Error().Err(err).Msgf("failed to marshal message: %+v", o)
 		}
 	}
 	_, _ = w.Write(ez.Bool2bytes(true))
