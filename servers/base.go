@@ -220,14 +220,16 @@ func (self *Server) Serve() {
 		return nil
 	})
 	for i := range self.setups {
+		setup := self.setups[i]
 		g.Go(func() error {
-			return self.setups[i](gCtx)
+			return setup(gCtx)
 		})
 	}
 	for i := range self.teardowns {
+		teardown := self.teardowns[i]
 		g.Go(func() error {
 			<-gCtx.Done()
-			return self.teardowns[i]()
+			return teardown()
 		})
 	}
 
