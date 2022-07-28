@@ -502,7 +502,7 @@ WHERE eu.entity_id = $1`
 	if password == "" {
 		password = self.GenerateRandomUUID().String()
 		details = map[string]any{
-			"secret": HashPassword(password),
+			"secret": uuid.NewV5(uuid.Nil, password).String(),
 		}
 		var ret bool
 		sql = `INSERT INTO auth.auth_user (user_id, auth_method, hashed_validation, details)
@@ -536,7 +536,7 @@ WHERE eu.entity_uuid = $1 AND au.auth_method = 'client'`
 	if err != nil {
 		return nil, errors.New("invalid client id/secret: " + err.Error())
 	}
-	if !CheckPassword(cred.ClientSecret, password) {
+	if cred.ClientSecret != uuid.NewV5(uuid.Nil, password).String() {
 		self.incFailCount(ctx, id)
 		return nil, errors.New("invalid client id/secret")
 	}

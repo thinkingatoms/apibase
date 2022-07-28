@@ -219,12 +219,16 @@ func (self *Server) Serve() {
 		return nil
 	})
 	for _, setup := range self.setups {
+		log.Info().Msgf("scheduling setup %+v", setup)
 		g.Go(func() error {
+			log.Info().Msgf("running setup %+v", setup)
 			return setup(gCtx)
 		})
 	}
 	for _, teardown := range self.teardowns {
+		log.Info().Msgf("scheduling teardown %+v", teardown)
 		g.Go(func() error {
+			log.Info().Msgf("running teardown %+v", teardown)
 			<-gCtx.Done()
 			return teardown()
 		})
