@@ -84,6 +84,7 @@ func NewServer(cors ...bool) *Server {
 	return s
 }
 
+//goland:noinspection HttpUrlsUsage
 func (self *Server) GetPublicURL() string {
 	if self.Port == 80 {
 		return strings.ReplaceAll(self.Public, "https://", "http://")
@@ -218,19 +219,15 @@ func (self *Server) Serve() {
 		_ = srv.Shutdown(context.Background())
 		return nil
 	})
-	for _, setup := range self.setups {
-		log.Info().Msgf("scheduling setup %+v", setup)
+	for i := range self.setups {
 		g.Go(func() error {
-			log.Info().Msgf("running setup %+v", setup)
-			return setup(gCtx)
+			return self.setups[i](gCtx)
 		})
 	}
-	for _, teardown := range self.teardowns {
-		log.Info().Msgf("scheduling teardown %+v", teardown)
+	for i := range self.teardowns {
 		g.Go(func() error {
-			log.Info().Msgf("running teardown %+v", teardown)
 			<-gCtx.Done()
-			return teardown()
+			return self.teardowns[i]()
 		})
 	}
 
