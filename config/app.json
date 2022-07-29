@@ -3,7 +3,11 @@
   "port": 80,
   "secret": "%(env:APP_SECRET)%",
   "public": "http://localhost",
-  "db_url": "postgres://api:%(env:DB_SECRET)%@db/app",
+  "db": {
+    "url": "postgres://api:%(env:DB_SECRET)%@db/app",
+    "max_conns": 50,
+    "min_conns": 25
+  },
   "sms": {
     "account_id": "%(env:TWILIO_ACCOUNT_ID)%",
     "auth_token": "%(env:TWILIO_AUTH_TOKEN)%",

@@ -40,7 +40,6 @@ type Server struct {
 	Seed        string `json:"seed"`
 	Port        int    `json:"port"`
 	Public      string `json:"public"`
-	DbURL       string `json:"db_url"`
 	Secret      string `json:"secret"`
 	CorsOrigins string `json:"cors_origins"`
 
@@ -82,6 +81,20 @@ func NewServer(cors ...bool) *Server {
 		s.UseCORS()
 	}
 	return s
+}
+
+func NewDbConn(ctx context.Context, config map[string]any) (models.DbConn, error) {
+	c, err := pgxpool.ParseConfig(config["url"].(string))
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := config["max_conns"]; ok {
+		c.MaxConns = v.(int32)
+	}
+	if v, ok := config["min_conns"]; ok {
+		c.MinConns = v.(int32)
+	}
+	return pgxpool.ConnectConfig(ctx, c)
 }
 
 //goland:noinspection HttpUrlsUsage
@@ -136,8 +149,8 @@ func (self *Server) LoadConfig(configPaths *[]string) {
 	}
 	self.Secret, self.secret = "", []byte(self.Secret)
 	ctx := context.Background()
-	if self.DbURL != "" {
-		self.db = ez.ReturnOrPanic(pgxpool.Connect(ctx, self.DbURL))
+	if self.HasSubConfig("db") {
+		self.db = ez.ReturnOrPanic(NewDbConn(ctx, self.GetSubConfig("db")))
 	}
 	self.Router.Use(render.SetContentType(render.ContentTypeJSON))
 	self.Router.Use(middleware.Heartbeat("/health"))
@@ -161,6 +174,7 @@ func (self *Server) LoadConfig(configPaths *[]string) {
 				case "forever":
 					self.cache.Clear(models.TenureForever)
 				}
+				ez.WriteBytes(w, r, []byte("OK"))
 			})
 		})
 	}
