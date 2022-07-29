@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 	"github.com/gorilla/handlers"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
@@ -83,28 +82,6 @@ func NewServer(cors ...bool) *Server {
 	return s
 }
 
-func NewDbConn(ctx context.Context, config map[string]any) (models.DbConn, error) {
-	c, err := pgxpool.ParseConfig(config["url"].(string))
-	if err != nil {
-		return nil, err
-	}
-	if v, ok := config["max_conns"]; ok {
-		conn, err := strconv.Atoi(v.(string))
-		if err != nil {
-			return nil, err
-		}
-		c.MaxConns = int32(conn)
-	}
-	if v, ok := config["min_conns"]; ok {
-		conn, err := strconv.Atoi(v.(string))
-		if err != nil {
-			return nil, err
-		}
-		c.MinConns = int32(conn)
-	}
-	return pgxpool.ConnectConfig(ctx, c)
-}
-
 //goland:noinspection HttpUrlsUsage
 func (self *Server) GetPublicURL() string {
 	if self.Port == 80 {
@@ -158,7 +135,7 @@ func (self *Server) LoadConfig(configPaths *[]string) {
 	self.Secret, self.secret = "", []byte(self.Secret)
 	ctx := context.Background()
 	if self.HasSubConfig("db") {
-		self.db = ez.ReturnOrPanic(NewDbConn(ctx, self.GetSubConfig("db")))
+		self.db = ez.ReturnOrPanic(models.NewDbConn(ctx, self.GetSubConfig("db")))
 	}
 	self.Router.Use(render.SetContentType(render.ContentTypeJSON))
 	self.Router.Use(middleware.Heartbeat("/health"))

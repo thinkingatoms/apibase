@@ -5,8 +5,8 @@
   "public": "http://localhost",
   "db": {
     "url": "postgres://api:%(env:DB_SECRET)%@db/app",
-    "max_conns": "50",
-    "min_conns": "25"
+    "max_conns": "10",
+    "min_conns": "2"
   },
   "sms": {
     "account_id": "%(env:TWILIO_ACCOUNT_ID)%",

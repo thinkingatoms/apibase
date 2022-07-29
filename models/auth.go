@@ -409,6 +409,7 @@ JOIN auth.end_user eu ON e.user_id = eu.entity_id
 WHERE e.user_id = e.target_id
 `
 	rows, err := self.db.Query(ctx, sql)
+	defer rows.Close()
 	if err != nil {
 		return nil, err
 	}
