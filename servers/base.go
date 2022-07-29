@@ -89,10 +89,18 @@ func NewDbConn(ctx context.Context, config map[string]any) (models.DbConn, error
 		return nil, err
 	}
 	if v, ok := config["max_conns"]; ok {
-		c.MaxConns = v.(int32)
+		conn, err := strconv.Atoi(v.(string))
+		if err != nil {
+			return nil, err
+		}
+		c.MaxConns = int32(conn)
 	}
 	if v, ok := config["min_conns"]; ok {
-		c.MinConns = v.(int32)
+		conn, err := strconv.Atoi(v.(string))
+		if err != nil {
+			return nil, err
+		}
+		c.MinConns = int32(conn)
 	}
 	return pgxpool.ConnectConfig(ctx, c)
 }
