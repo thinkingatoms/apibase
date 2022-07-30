@@ -667,6 +667,9 @@ SELECT entity_id, $6, $7, $8 FROM new_user RETURNING user_id`
 	} else if err != nil {
 		return "", err
 	}
+	if entityStatus != UserStatusVerified {
+		return "", errors.New("user is not verified")
+	}
 	if forceNew && id != 0 {
 		return "", errors.New("invalid login")
 	}
