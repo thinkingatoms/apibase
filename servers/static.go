@@ -12,46 +12,14 @@ import (
 	"strings"
 )
 
-//var noCacheHeaders = map[string]string{
-//	"Expires":         time.Unix(0, 0).Format(time.RFC1123),
-//	"Cache-Control":   "no-cache, private, max-age=0",
-//	"Pragma":          "no-cache",
-//	"X-Accel-Expires": "0",
-//}
-//
-//var etagHeaders = []string{
-//	"ETag",
-//	"If-Modified-Since",
-//	"If-Match",
-//	"If-None-Match",
-//	"If-Range",
-//	"If-Unmodified-Since",
-//}
-
 func wrapHandler(h http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		srw := &statusResponseWriter{ResponseWriter: w}
-		//force := r.URL.Query().Get("force") == "true"
-		//if force {
-		//	for _, v := range etagHeaders {
-		//		if r.Header.Get(v) != "" {
-		//			r.Header.Del(v)
-		//		}
-		//	}
-		//
-		//	// Set our NoCache headers
-		//	for k, v := range noCacheHeaders {
-		//		w.Header().Set(k, v)
-		//	}
-		//}
 		h.ServeHTTP(srw, r)
 		if srw.status >= 400 { // 400+ codes are the error codes
 			log.Printf("Error status code: %d when serving path: %s",
 				srw.status, r.RequestURI)
 		}
-		//if force {
-		//	w.Header().Set("Last-Modified", time.Now().Format(time.RFC1123))
-		//}
 	}
 }
 
