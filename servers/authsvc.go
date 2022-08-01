@@ -410,7 +410,7 @@ func (self *authService) signupHandler(w http.ResponseWriter, r *http.Request) {
 
 func (self *authService) sendVerificationEmail(ctx context.Context, email, verificationCode string) error {
 	subject := "Verify your email"
-	body := fmt.Sprintf("Please verify your email by clicking the link below:\n\n%s/auth/v1/verify-email/%s\n\n",
+	body := fmt.Sprintf("Please verify your email by clicking the link below:\n\n%s/auth/v1/verify-email/%s\n\nThank you!\n\n",
 		self.server.GetPublicURL(), verificationCode)
 	return self.emailClient.Send(ctx, email, subject, body)
 }
