@@ -528,18 +528,28 @@ WHERE eu.entity_id = $1 AND au.auth_method = 'client'`
 }
 
 func (self *AuthDbImpl) CheckClientCred(ctx context.Context, cred *ClientCredential) (JWTPayload, error) {
-	sql := `SELECT eu.entity_id, eu.email, au.hashed_validation FROM auth.end_user eu
+	sql := `SELECT eu.entity_id, eu.email, eu.fail_count, eu.last_updated,
+au.hashed_validation FROM auth.end_user eu
 JOIN auth.auth_user au ON eu.entity_id = au.user_id
 WHERE eu.entity_uuid = $1 AND au.auth_method = 'client'`
 	var id int64
 	var email, password string
-	err := self.db.QueryRow(ctx, sql, cred.ClientID).Scan(&id, &email, &password)
+	var failCount int
+	var lastUpdated time.Time
+	err := self.db.QueryRow(ctx, sql, cred.ClientID).Scan(
+		&id, &email, &failCount, &lastUpdated, &password)
 	if err != nil {
 		return nil, errors.New("invalid client id/secret: " + err.Error())
+	}
+	err = self.checkFailCount(failCount, lastUpdated)
+	if err != nil {
+		return nil, err
 	}
 	if cred.ClientSecret != uuid.NewV5(uuid.Nil, password).String() {
 		self.incFailCount(ctx, id)
 		return nil, errors.New("invalid client id/secret")
+	} else if failCount > 0 {
+		self.resetFailCount(ctx, id)
 	}
 	return self.CreatePayload(ctx, email)
 }
@@ -551,19 +561,29 @@ type Login struct {
 }
 
 func (self *AuthDbImpl) CheckLogin(ctx context.Context, cred *Login) (JWTPayload, error) {
-	sql := `SELECT eu.entity_id, au.hashed_validation FROM auth.end_user eu
+	sql := `SELECT eu.entity_id, eu.fail_count, eu.last_updated,
+au.hashed_validation FROM auth.end_user eu
 JOIN auth.auth_user au ON eu.entity_id = au.user_id
 WHERE eu.email = $1 AND au.auth_method = 'password'`
 	var id int64
+	var failCount int
+	var lastUpdated time.Time
 	var hashedValidation string
 	email := strings.TrimSpace(strings.ToLower(cred.Email))
-	err := self.db.QueryRow(ctx, sql, email).Scan(&id, &hashedValidation)
+	err := self.db.QueryRow(ctx, sql, email).Scan(
+		&id, &failCount, &lastUpdated, &hashedValidation)
+	if err != nil {
+		return nil, err
+	}
+	err = self.checkFailCount(failCount, lastUpdated)
 	if err != nil {
 		return nil, err
 	}
 	if !CheckPassword(hashedValidation, cred.Password) {
 		self.incFailCount(ctx, id)
 		return nil, errors.New("invalid credentials")
+	} else if failCount > 0 {
+		self.resetFailCount(ctx, id)
 	}
 	return self.CreatePayload(ctx, email)
 }
@@ -673,9 +693,9 @@ SELECT entity_id, $6, $7, $8 FROM new_user RETURNING user_id`
 	if forceNew && id != 0 {
 		return "", errors.New("invalid login")
 	}
-	checkTime := lastUpdated.Add(self.FailCountExpiry * time.Second)
-	if failCount > self.MaxFailCount && time.Now().Before(checkTime) {
-		return "", errors.New("too many failed login attempts")
+	err = self.checkFailCount(failCount, lastUpdated)
+	if err != nil {
+		return "", err
 	}
 	if hashedValidation == nil {
 		var tmp bool
@@ -697,13 +717,7 @@ VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING RETURNING true`
 		return "", errors.New("cannot validate login")
 	}
 	if failCount > 0 {
-		sql := `UPDATE auth.end_user SET fail_count = 0,
-last_updated = current_timestamp, last_updated_by = session_user
-WHERE entity_id = $1`
-		_, err := self.db.Exec(ctx, sql, id)
-		if err != nil {
-			log.Error().Msgf("failed to reset fail count: %s", err.Error())
-		}
+		self.resetFailCount(ctx, id)
 	}
 	if u.EntityStatus == UserStatusVerified && entityStatus == UserStatusUnverified {
 		sql := `UPDATE auth.end_user eu SET eu.entity_status_id = es.entity_status_id
@@ -722,6 +736,24 @@ AND eu.email = $3`
 		}
 	}
 	return u.Email, nil
+}
+
+func (self *AuthDbImpl) checkFailCount(failCount int, lastUpdated time.Time) error {
+	checkTime := lastUpdated.Add(self.FailCountExpiry * time.Second)
+	if failCount > self.MaxFailCount && time.Now().Before(checkTime) {
+		return errors.New("too many failed login attempts")
+	}
+	return nil
+}
+
+func (self *AuthDbImpl) resetFailCount(ctx context.Context, id int64) {
+	sql := `UPDATE auth.end_user SET fail_count = 0,
+last_updated = current_timestamp, last_updated_by = session_user
+WHERE entity_id = $1`
+	_, err := self.db.Exec(ctx, sql, id)
+	if err != nil {
+		log.Error().Msgf("failed to reset fail count: %s", err.Error())
+	}
 }
 
 type Profile struct {
