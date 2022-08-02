@@ -29,7 +29,21 @@ func AccessDeniedHandler(w http.ResponseWriter, r *http.Request, err error) {
 	_ = r
 	w.WriteHeader(http.StatusUnauthorized)
 	_, _ = fmt.Fprintln(w, "unauthorized:  "+err.Error())
+	hlog.FromRequest(r).Error().Err(err).Msg("access denied")
+}
+
+func ForbiddenHandler(w http.ResponseWriter, r *http.Request, err error) {
+	_ = r
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = fmt.Fprintln(w, "unauthorized:  "+err.Error())
 	hlog.FromRequest(r).Error().Err(err).Msg("forbidden")
+}
+
+func NotFoundHandler(w http.ResponseWriter, r *http.Request, err error) {
+	_ = r
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = fmt.Fprintln(w, "unauthorized:  "+err.Error())
+	hlog.FromRequest(r).Error().Err(err).Msg("not found")
 }
 
 func WriteObjectAsJSON(w http.ResponseWriter, r *http.Request, v any) {
@@ -86,4 +100,6 @@ func GetDummyResponseWriter() *DummyResponseWriter {
 
 func _() {
 	_ = StaticMsgHandler
+	_ = ForbiddenHandler
+	_ = NotFoundHandler
 }
