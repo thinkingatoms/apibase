@@ -507,13 +507,13 @@ func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Reque
 	if o.Code != "" {
 		payload, err := self.auth.LoadJWT(r)
 		if err != nil {
-			ez.AccessDeniedHandler(w, r, errors.New("only admins can set code"))
+			ez.AccessDeniedHandler(w, r, errors.New("invalid token"))
 			return
 		}
 		if self.auth.HasRole(payload, "admin") {
 			code = o.Code
 		} else {
-			ez.AccessDeniedHandler(w, r, errors.New("only admins can set code"))
+			ez.ForbiddenHandler(w, r, errors.New("only admins can set code"))
 			return
 		}
 	}

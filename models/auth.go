@@ -211,7 +211,7 @@ func (self *SimpleJWTIssuer) IsAdmin(handler http.HandlerFunc) http.HandlerFunc 
 			handler.ServeHTTP(w, r)
 			return
 		}
-		ez.AccessDeniedHandler(w, r, errors.New("not admin"))
+		ez.ForbiddenHandler(w, r, errors.New("not admin"))
 	}
 }
 

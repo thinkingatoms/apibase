@@ -130,14 +130,14 @@ func (self *Environment) GetConfig(parts []string) (map[string]any, error) {
 		var value any
 		var immediateKey string
 		path := part
-		if before, after, found := strings.Cut(part, "=="); found {
+		if before, after, found := strings.Cut(path, "=="); found {
 			keys = strings.Split(before, chainSep)
 			path = after
 		}
-		if before, after, found := strings.Cut(part, "=:"); found {
+		if before, after, found := strings.Cut(path, "=:"); found {
 			path = before
 			immediateKey = after
-		} else if before, after, found := strings.Cut(part, "="); found {
+		} else if before, after, found := strings.Cut(path, "="); found {
 			keys = strings.Split(before, chainSep)
 			value, err = self.parseConfigValue(after)
 			if err != nil {
