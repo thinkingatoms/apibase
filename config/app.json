@@ -41,7 +41,8 @@
         "client_id": "%(env:LINKEDIN_CLIENT_ID)%",
         "client_secret": "%(env:LINKEDIN_CLIENT_SECRET)%"
       }
-    }
+    },
+    "login_url": "https://thinkingatoms.com/atom"
   },
   "stripe": {
     "secret_key": "%(env:STRIPE_SECRET_KEY)%",

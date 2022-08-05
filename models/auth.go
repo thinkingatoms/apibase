@@ -82,7 +82,6 @@ type Auth interface {
 
 	GetCookieMaxAge() int
 	GenerateRandomUUID() uuid.UUID
-	GetOauthProviderCred(string) *ClientCredential
 	CreatePayload(context.Context, string) (JWTPayload, error)
 	CheckRefresh(context.Context, string, string) (JWTPayload, error)
 	CreateClientCred(context.Context, string) (*ClientCredential, error)
@@ -282,12 +281,11 @@ type AuthDbImpl struct {
 
 	db DbConn
 
-	MaxAge          int                          `json:"max_age"`
-	Providers       map[string]map[string]string `json:"providers"`
-	MaxFailCount    int                          `json:"max_fail_count"`
-	FailCountExpiry time.Duration                `json:"fail_count_expiry"`
-	SessionExpiry   time.Duration                `json:"session_expiry"`
-	AllowUnverified bool                         `json:"allow_unverified"`
+	MaxAge          int           `json:"max_age"`
+	MaxFailCount    int           `json:"max_fail_count"`
+	FailCountExpiry time.Duration `json:"fail_count_expiry"`
+	SessionExpiry   time.Duration `json:"session_expiry"`
+	AllowUnverified bool          `json:"allow_unverified"`
 }
 
 func NewJWTIssuer(secretGetter func() []byte) JWTIssuer {
@@ -586,16 +584,6 @@ WHERE eu.email = $1 AND au.auth_method = 'password'`
 		self.resetFailCount(ctx, id)
 	}
 	return self.CreatePayload(ctx, email)
-}
-
-func (self *AuthDbImpl) GetOauthProviderCred(name string) *ClientCredential {
-	if v, ok := self.Providers[name]; ok {
-		return &ClientCredential{
-			ClientID:     v["client_id"],
-			ClientSecret: v["client_secret"],
-		}
-	}
-	return nil
 }
 
 // User management

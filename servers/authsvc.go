@@ -29,6 +29,9 @@ type authService struct {
 	adminRoles  map[string]bool
 	smsClient   *models.SMSClient
 	emailClient *models.EmailClient
+
+	LoginURL  string                       `json:"login_url,omitempty"`
+	Providers map[string]map[string]string `json:"providers,omitempty"`
 }
 
 func CreateAuth(server *Server) (models.Auth, error) {
@@ -59,6 +62,10 @@ func RegisterAuthService(server *Server, auth models.Auth, adminRoles string) {
 	}
 	if server.HasSubConfig("email") {
 		s.emailClient = models.EmailClientFromConfig(server.GetSubConfig("email"))
+	}
+	name := "auth"
+	if server.HasSubConfig(name) {
+		ez.PanicIfErr(ez.MapToObject(server.GetSubConfig(name), &s))
 	}
 	s.EnrichRouter(server.Router)
 	server.AddSetup(s.Setup)
@@ -115,7 +122,7 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 		r.Get("/profile", self.auth.IsLoggedIn(self.profileHandler))
 
 		r.Post("/oauth", self.oauthHandler)
-		cred := self.auth.GetOauthProviderCred("google")
+		cred := self.getOauthProviderCred("google")
 		if cred != nil {
 			goth.UseProviders(
 				google.New(
@@ -127,7 +134,7 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 			r.Get("/google", self.oauthInit("google"))
 			r.Get("/google/callback", self.oauthCallback("google"))
 		}
-		cred = self.auth.GetOauthProviderCred("linkedin")
+		cred = self.getOauthProviderCred("linkedin")
 		if cred != nil {
 			goth.UseProviders(
 				linkedin.New(
@@ -140,6 +147,16 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 			r.Get("/linkedin/callback", self.oauthCallback("linkedin"))
 		}
 	})
+}
+
+func (self *authService) getOauthProviderCred(name string) *models.ClientCredential {
+	if v, ok := self.Providers[name]; ok {
+		return &models.ClientCredential{
+			ClientID:     v["client_id"],
+			ClientSecret: v["client_secret"],
+		}
+	}
+	return nil
 }
 
 func (self *authService) adminOnly(next http.Handler) http.Handler {
@@ -569,5 +586,20 @@ func (self *authService) messageHandler(w http.ResponseWriter, r *http.Request) 
 
 func (self *authService) emailHandler(w http.ResponseWriter, r *http.Request) {
 	code := chi.URLParam(r, "code")
-	ez.DoOr401(w, r, self.payloadHandler)(self.auth.CheckEmailVerification(r.Context(), code))
+	payload, err := self.auth.CheckEmailVerification(r.Context(), code)
+	if err != nil {
+		ez.InternalServerErrorHandler(w, r, err)
+		return
+	} else if payload == nil {
+		ez.AccessDeniedHandler(w, r, errors.New("could not verify email code"))
+		return
+	}
+	msg := "Thank you for verifying your email!"
+	if self.LoginURL != "" {
+		var sb strings.Builder
+		sb.WriteString("<html><body><p>Thank you for verifying your email!</p><br/>")
+		sb.WriteString(fmt.Sprintf("<p>You can login <a href=\"%s\">here</a></p></body></html>", self.LoginURL))
+		msg = sb.String()
+	}
+	ez.WriteBytes(w, r, []byte(msg))
 }
