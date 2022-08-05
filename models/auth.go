@@ -628,10 +628,20 @@ func (self *AuthDbImpl) CreateLogin(ctx context.Context, cred *Login, ipAddress 
 	}
 	_, err := self.UpsertUser(ctx, u, true)
 	if err != nil {
-		return "", err
+		if errors.Is(err, ErrUserUnverified) {
+			sql := `SELECT eu.entity_uuid FROM auth.end_user eu WHERE eu.email = $1`
+			err = self.db.QueryRow(ctx, sql, cred.Email).Scan(&u.EntityUUID)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
 	}
 	return self.CreateEmailVerification(ctx, u.EntityUUID, ipAddress)
 }
+
+var ErrUserUnverified = errors.New("user is not verified")
 
 func (self *AuthDbImpl) UpsertUser(ctx context.Context, u *AuthUser, forceNew bool) (string, error) {
 	if !forceNew && u.EntityStatus != UserStatusVerified {
@@ -676,10 +686,10 @@ SELECT entity_id, $6, $7, $8 FROM new_user RETURNING user_id`
 		return "", err
 	}
 	if entityStatus != UserStatusVerified {
-		return "", errors.New("user is not verified")
+		return "", ErrUserUnverified
 	}
 	if forceNew && id != 0 {
-		return "", errors.New("invalid login")
+		return "", errors.New("user already exists")
 	}
 	err = self.checkFailCount(failCount, lastUpdated)
 	if err != nil {
