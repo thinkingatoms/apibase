@@ -2,7 +2,6 @@ package models
 
 import (
 	"github.com/rs/zerolog/log"
-	"github.com/thinkingatoms/apibase/ez"
 	errors "golang.org/x/xerrors"
 	"math"
 	"os"
@@ -377,7 +376,10 @@ func (_ *Environment) extractValue(v any, keys []string) (any, error) {
 func NewEnvironment(name, env, rootURL string) *Environment {
 	httpClient := NewHTTPClient(rootURL, 20, 10, 10)
 	versionURL := filepath.Join(env, "VERSION.json")
-	version := ez.ReturnOrPanic(httpClient.ToJSON(httpClient.Get(versionURL, nil)))
+	version, err := httpClient.ToJSON(httpClient.Get(versionURL, nil))
+	if err != nil {
+		log.Fatal().Err(err).Msg("failed to load version at: " + httpClient.getURL(versionURL))
+	}
 	if version["name"].(string) != name {
 		panic("unexpected name " + name + " vs version name " + version["name"].(string))
 	}

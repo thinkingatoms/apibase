@@ -11,7 +11,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /appserver
 
-# FROM scratch
-# COPY --from=build /appserver /appserver
+FROM scratch
+COPY --from=build /appserver /appserver
+COPY --from=build /app/config /app/config
 
 # RUN adduser -D -g '' nonroot
