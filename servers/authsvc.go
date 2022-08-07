@@ -30,6 +30,7 @@ type authService struct {
 	smsClient   *models.SMSClient
 	emailClient *models.EmailClient
 
+	TestPhone string                       `json:"test_phone,omitempty"`
 	LoginURL  string                       `json:"login_url,omitempty"`
 	Providers map[string]map[string]string `json:"providers,omitempty"`
 }
@@ -521,7 +522,10 @@ func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	code := ez.RandIntSeq(6)
-	if o.Code != "" {
+	log.Info().Msgf("WTFFFFFFFFFFFFFFFF %s vs %s", self.TestPhone, phone)
+	if self.TestPhone == phone {
+		code = "000000"
+	} else if o.Code != "" {
 		payload, err := self.auth.LoadJWT(r)
 		if err != nil {
 			ez.AccessDeniedHandler(w, r, errors.New("invalid token"))
@@ -539,11 +543,13 @@ func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Reque
 		ez.InternalServerErrorHandler(w, r, err)
 		return
 	}
-	msg := fmt.Sprintf("%s verification code: %s", self.server.Name, code)
-	err = self.smsClient.Send(phone, msg)
-	if err != nil {
-		ez.InternalServerErrorHandler(w, r, err)
-		return
+	if self.TestPhone != phone {
+		msg := fmt.Sprintf("%s verification code: %s", self.server.Name, code)
+		err = self.smsClient.Send(phone, msg)
+		if err != nil {
+			ez.InternalServerErrorHandler(w, r, err)
+			return
+		}
 	}
 	_, _ = w.Write(ez.Bool2bytes(true))
 }

@@ -8,8 +8,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy the code into the container.
-COPY . .
+COPY cmd cmd
+COPY ez ez
+COPY models models
+COPY servers servers
+COPY main.go main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /appserver
+COPY config config
 
 FROM scratch
 COPY --from=build /appserver /appserver

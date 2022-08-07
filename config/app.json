@@ -42,6 +42,7 @@
         "client_secret": "%(env:LINKEDIN_CLIENT_SECRET)%"
       }
     },
+    "test_phone": "10000000000",
     "login_url": "https://thinkingatoms.com/atom"
   },
   "stripe": {
