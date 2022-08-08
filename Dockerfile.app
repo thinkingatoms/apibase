@@ -21,5 +21,6 @@ COPY config config
 FROM scratch
 COPY --from=build /appserver /appserver
 COPY --from=build /app/config /app/config
+COPY --from=build /etc/ssl /etc/ssl
 
 # RUN adduser -D -g '' nonroot
