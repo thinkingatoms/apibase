@@ -1,5 +1,7 @@
 FROM golang:1.18-alpine AS build
 
+RUN apk add ca-certificates && update-ca-certificates
+
 # Move to working directory (/build).
 WORKDIR /app
 

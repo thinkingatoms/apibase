@@ -522,7 +522,6 @@ func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	code := ez.RandIntSeq(6)
-	log.Info().Msgf("WTFFFFFFFFFFFFFFFF %s vs %s", self.TestPhone, phone)
 	if self.TestPhone == phone {
 		code = "000000"
 	} else if o.Code != "" {
