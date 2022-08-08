@@ -27,6 +27,9 @@ DROP TABLE IF EXISTS auth_user_hist CASCADE
 ;
 DROP TRIGGER IF EXISTS auth_user_audit ON auth_user
 ;
+---VIEW v_auth_user
+drop view if exists v_auth_user cascade
+;
 ---TABLE auth_role: HIST
 drop table if exists auth_role cascade
 ;

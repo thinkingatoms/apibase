@@ -331,6 +331,18 @@ FOR EACH ROW EXECUTE PROCEDURE auth_user_audit()
 ;
 GRANT ALL ON SEQUENCE auth_user_hist_auth_user_hist_id_seq TO readwrite
 ;
+---VIEW v_auth_user
+drop view if exists v_auth_user cascade
+;
+create or replace view v_auth_user as
+select eu.entity_id, eu.entity_uuid, eu.display_name, eu.email, eu.fail_count, eu.details,
+es.status_name as entity_status, au.auth_method, au.hashed_validation, au.details as auth_details
+from auth.end_user eu
+join auth.auth_user au on eu.entity_id = au.user_id
+join auth.entity_status es on eu.entity_status_id = es.entity_status_id
+;
+GRANT SELECT ON v_auth_user TO readonly
+;
 ---TABLE auth_role: HIST
 drop table if exists auth_role cascade
 ;

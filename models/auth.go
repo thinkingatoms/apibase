@@ -759,22 +759,18 @@ type Profile struct {
 	DisplayName string         `json:"display_name"`
 	UserStatus  UserStatus     `json:"user_status"`
 	Details     map[string]any `json:"details"`
-	AuthDetails map[string]any `json:"auth_details"`
+	FailCount   int            `json:"fail_count"`
 }
 
 func (self *AuthDbImpl) GetProfile(ctx context.Context, id string) (*Profile, error) {
 	sql := `
-WITH tmp AS (
-SELECT jsonb_object_agg(au.auth_method, au.details) as auth_details
-FROM auth.end_user eu JOIN auth.auth_user au ON eu.entity_id = au.user_id
-WHERE eu.entity_id = $1
-)
-SELECT es.status_name, eu.display_name, eu.details, eu.email, a.auth_details
+SELECT es.status_name, eu.display_name, eu.details, eu.email, eu.fail_count
 FROM auth.end_user eu
 JOIN auth.entity_status es ON eu.entity_status_id = es.entity_status_id
-CROSS JOIN tmp a WHERE eu.entity_id = $1`
+WHERE eu.entity_id = $1`
 	var p Profile
-	err := self.db.QueryRow(ctx, sql, id).Scan(&p.UserStatus, &p.DisplayName, &p.Details, &p.Email, &p.AuthDetails)
+	err := self.db.QueryRow(ctx, sql, id).Scan(
+		&p.UserStatus, &p.DisplayName, &p.Details, &p.Email, &p.FailCount)
 	if err != nil {
 		return nil, err
 	}
