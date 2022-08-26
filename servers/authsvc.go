@@ -48,7 +48,7 @@ func CreateAuth(server *Server) (models.Auth, error) {
 	return models.AuthFromConfig(db, server.GetSubConfig(name), server.GetSecret), nil
 }
 
-func RegisterAuthService(server *Server, auth models.Auth, adminRoles string) {
+func RegisterAuthService(server *Server, auth models.Auth, adminRoles string) error {
 	roles := make(map[string]bool)
 	for _, role := range strings.Split(adminRoles, ",") {
 		roles[role] = true
@@ -58,11 +58,15 @@ func RegisterAuthService(server *Server, auth models.Auth, adminRoles string) {
 		auth:       auth,
 		adminRoles: roles,
 	}
-	if server.HasSubConfig("sms") {
-		s.smsClient = models.SMSFromConfig(server.GetSubConfig("sms"))
-	}
+	var err error
 	if server.HasSubConfig("email") {
 		s.emailClient = models.EmailClientFromConfig(server.GetSubConfig("email"))
+	}
+	if server.HasSubConfig("sms") {
+		s.smsClient, err = models.SMSFromConfig(server.GetSubConfig("sms"), s.emailClient)
+		if err != nil {
+			return err
+		}
 	}
 	name := "auth"
 	if server.HasSubConfig(name) {
@@ -70,6 +74,7 @@ func RegisterAuthService(server *Server, auth models.Auth, adminRoles string) {
 	}
 	s.EnrichRouter(server.Router)
 	server.AddSetup(s.Setup)
+	return nil
 }
 
 func (self *authService) Setup(ctx context.Context) error {
@@ -112,6 +117,7 @@ func (self *authService) EnrichRouter(router *chi.Mux) {
 		// authenticate based on client_id/client_secret
 		r.Post("/generate-phone", self.createPhoneHandler)
 		r.Post("/phone", self.phoneHandler)
+		r.Get("/phone-gateways", self.getPhoneGatewaysHandler)
 		r.Post("/generate-client", self.auth.IsLoggedIn(self.createClientHandler))
 		r.Post("/client", self.clientHandler)
 
@@ -508,6 +514,10 @@ func (self *authService) payloadHandler(w http.ResponseWriter, r *http.Request, 
 	})
 }
 
+func (self *authService) getPhoneGatewaysHandler(w http.ResponseWriter, r *http.Request) {
+	ez.WriteObjectAsJSON(w, r, self.smsClient.GetSMSGatewayCountries())
+}
+
 func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Request) {
 	var o models.PhoneCode
 	err := json.NewDecoder(r.Body).Decode(&o)
@@ -544,7 +554,8 @@ func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Reque
 	}
 	if self.TestPhone != phone {
 		msg := fmt.Sprintf("%s verification code: %s", self.server.Name, code)
-		err = self.smsClient.Send(phone, msg)
+		o.Body = msg
+		err = self.smsClient.Send(&o.SMSMessage)
 		if err != nil {
 			ez.InternalServerErrorHandler(w, r, err)
 			return

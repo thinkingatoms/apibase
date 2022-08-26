@@ -34,7 +34,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.app
-    command: /appserver auth -c app.json -c port=3000
+    command: /appserver auth -c app.json -c sms_gateways==sms_gateways.json -c port=3000
     environment:
       APP_SECRET: $APP_SECRET
       DB_SECRET: $DB_SECRET

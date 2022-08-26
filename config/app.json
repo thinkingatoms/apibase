@@ -12,8 +12,10 @@
     "account_id": "%(env:TWILIO_ACCOUNT_ID)%",
     "auth_token": "%(env:TWILIO_AUTH_TOKEN)%",
     "from": "%(env:TWILIO_FROM)%",
-    "service_sid": "%(env:TWILIO_SERVICE_SID)%"
+    "service_sid": "%(env:TWILIO_SERVICE_SID)%",
+    "sms_gateways": "%(sms_gateways)%"
   },
+  "sms_gateways": null,
   "email": {
     "from": "%(env:EMAIL_FROM)%",
     "to": "%(env:EMAIL_TO)%",

@@ -839,23 +839,8 @@ func (self *AuthDbImpl) IsLoggedIn(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 type PhoneCode struct {
-	Phone string `json:"phone,omitempty"`
-	Code  string `json:"code,omitempty"`
-}
-
-func (self *PhoneCode) GetPhone() (string, error) {
-	phone := self.Phone
-	phone = strings.ReplaceAll(phone, "-", "")
-	phone = strings.ReplaceAll(phone, "(", "")
-	phone = strings.ReplaceAll(phone, ")", "")
-	phone = strings.ReplaceAll(phone, "+", "")
-	if _, err := strconv.ParseInt(phone, 10, 64); err != nil {
-		return "", err
-	}
-	if len(phone) < 9 {
-		return "", errors.New("phone number too small")
-	}
-	return phone, nil
+	SMSMessage
+	Code string `json:"code,omitempty"`
 }
 
 func (self *AuthDbImpl) CreateAuthCode(ctx context.Context,

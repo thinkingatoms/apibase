@@ -1,0 +1,51 @@
+{
+  "gateways": {
+    "AT&T": {"sms": "txt.att.net", "mms": "mms.att.net"},
+    "Boost Mobile": {"sms": "sms.myboostmobile.com", "mms": "myboostmobile.com"},
+    "C-Spire": {"sms": "cspire1.com"},
+    "Consumer Cellular": {"sms": "mailmymobile.net"},
+    "Cricket": {"sms": "sms.cricketwireless.net", "mms": "mms.cricketwireless.net"},
+    "Google Fi": {"sms": "msg.fi.google.com", "mms": "msg.fi.google.com"},
+    "Metro PCS": {"sms": "mymetropcs.com", "mms": "mymetropcs.com"},
+    "Mint Mobile": {"sms": "mailmymobile.net"},
+    "Page Plus": {"sms": "vtext.com", "mms": "mypixmessages.com"},
+    "Republic Wireless": {"sms": "text.republicwireless.com"},
+    "Simple Mobile": {"sms": "smtext.com"},
+    "Sprint": {"sms": "messaging.sprintpcs.com", "mms": "pm.sprint.com"},
+    "T-Mobile": {"sms": "tmomail.net", "mms": "tmomail.net"},
+    "Tello": {"sms": "tmomail.net", "mms": "tmomail.net"},
+    "Tracfone": {"sms": "mmst5.tracfone.com"},
+    "U.S. Cellular": {"sms": "email.uscc.net", "mms": "mms.uscc.net"},
+    "Verizon": {"sms": "vtext.com", "mms": "vzwpix.com"},
+    "Virgin Mobile": {"sms": "vmobl.com", "mms": "vmpix.com"},
+    "Visible": {"sms": "vtext.com", "mms": "vzwpix.com"},
+    "Xfinity Mobile": {"sms": "vtext.com", "mms": "mypixmessages.com"}
+  },
+  "countries": {
+    "US": {
+      "code": "+1",
+      "gateways": [
+        "AT&T",
+        "Boost Mobile",
+        "C-Spire",
+        "Consumer Cellular",
+        "Cricket",
+        "Google Fi",
+        "Metro PCS",
+        "Mint Mobile",
+        "Page Plus",
+        "Republic Wireless",
+        "Simple Mobile",
+        "Sprint",
+        "T-Mobile",
+        "Tello",
+        "Tracfone",
+        "U.S. Cellular",
+        "Verizon",
+        "Virgin Mobile",
+        "Visible",
+        "Xfinity Mobile"
+      ]
+    }
+  }
+}

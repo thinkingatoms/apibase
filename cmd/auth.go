@@ -27,7 +27,7 @@ to quickly create a Cobra application.`,
 		app := servers.NewServer(true)
 		app.LoadConfig(configs)
 		a := ez.ReturnOrPanic(servers.CreateAuth(app))
-		servers.RegisterAuthService(app, a, "admin")
+		ez.PanicIfErr(servers.RegisterAuthService(app, a, "admin"))
 		ez.PanicIfErr(servers.RegisterStripeService(app, a))
 		app.Serve()
 	},
