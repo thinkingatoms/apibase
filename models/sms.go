@@ -25,12 +25,17 @@ type SMSMessage struct {
 	Phone   string `json:"phone"`
 	Body    string `json:"body,omitempty"`
 	Gateway string `json:"gateway,omitempty"`
-	Country string `json:"country"`
+	Country string `json:"country,omitempty"`
 }
 
-func (self *SMSMessage) GetPhone() (string, error) {
-	if self.Country == "US" {
-		phone := self.Phone
+func (self *SMSMessage) GetPhone(client *SMSClient, withCountryCode bool) (string, error) {
+	phone := self.Phone
+	countryCode, err := client.GetCountryCode(self.Country)
+	if err != nil {
+		return "", err
+	}
+	switch self.Country {
+	case "US":
 		phone = strings.ReplaceAll(phone, "-", "")
 		phone = strings.ReplaceAll(phone, "(", "")
 		phone = strings.ReplaceAll(phone, ")", "")
@@ -38,12 +43,29 @@ func (self *SMSMessage) GetPhone() (string, error) {
 		if _, err := strconv.ParseInt(phone, 10, 64); err != nil {
 			return "", err
 		}
-		if len(phone) < 9 {
+		if len(phone) <= 9 {
 			return "", errors.New("phone number too small")
 		}
-		return phone, nil
+	default:
+		return "", errors.New("does not support country " + self.Country)
 	}
-	return "", errors.New("does not support country " + self.Country)
+	if withCountryCode {
+		return countryCode + phone, nil
+	}
+	return phone, nil
+}
+
+func (self *SMSMessage) GetEmail(client *SMSClient) (string, error) {
+	phone, err := self.GetPhone(client, false)
+	if err != nil {
+		return "", err
+	}
+	var server string
+	server, err = client.GetSMSServer(self.Country, self.Gateway)
+	if err != nil {
+		return "", err
+	}
+	return phone + "@" + server, nil
 }
 
 type SMSGateways struct {
@@ -108,13 +130,13 @@ func (self *SMSClient) GetSMSGatewayCountries() map[string]SMSGatewayCountry {
 
 func (self *SMSClient) Send(msg *SMSMessage) error {
 	if msg.Gateway != "" {
-		email, err := self.getEmail(msg)
+		email, err := msg.GetEmail(self)
 		if err != nil {
 			return err
 		}
 		return self.emailClient.Send(context.Background(), email, "", msg.Body)
 	}
-	phone, err := self.getPhone(msg)
+	phone, err := msg.GetPhone(self, true)
 	if err != nil {
 		return err
 	}
@@ -127,31 +149,23 @@ func (self *SMSClient) Send(msg *SMSMessage) error {
 	return err
 }
 
-func (self *SMSClient) getEmail(msg *SMSMessage) (string, error) {
-	phone, err := msg.GetPhone()
-	if err != nil {
-		return "", err
+func (self *SMSClient) GetCountryCode(country string) (string, error) {
+	if c, ok := self.smsGateways.Countries[country]; ok {
+		return c.CountryCode, nil
 	}
+	return "", errors.New("unknown country specified: " + country)
+}
+
+func (self *SMSClient) GetSMSServer(country, gateway string) (string, error) {
 	if self.smsGateways == nil {
 		return "", errors.New("not configured to send SMS via email gateway")
 	}
-	if v, ok := self.smsGateways.Gateways[msg.Gateway]; ok {
-		if c, ok := self.smsGateways.Countries[msg.Country]; ok {
-			if _, ok := c.Gateways[msg.Gateway]; ok {
-				return phone + "@" + v["sms"], nil
+	if v, ok := self.smsGateways.Gateways[gateway]; ok {
+		if c, ok := self.smsGateways.Countries[country]; ok {
+			if _, ok := c.Gateways[gateway]; ok {
+				return v["sms"], nil
 			}
 		}
 	}
-	return "", errors.New("unknown email gateway/country specified: " + msg.Gateway + "/" + msg.Country)
-}
-
-func (self *SMSClient) getPhone(msg *SMSMessage) (string, error) {
-	phone, err := msg.GetPhone()
-	if err != nil {
-		return "", err
-	}
-	if c, ok := self.smsGateways.Countries[msg.Country]; ok {
-		return c.CountryCode + phone, nil
-	}
-	return "", errors.New("unknown country specified: " + msg.Country)
+	return "", errors.New("unknown gateway/country specified: " + gateway + "/" + country)
 }

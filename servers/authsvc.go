@@ -518,15 +518,20 @@ func (self *authService) getPhoneGatewaysHandler(w http.ResponseWriter, r *http.
 	ez.WriteObjectAsJSON(w, r, self.smsClient.GetSMSGatewayCountries())
 }
 
+type PhoneCode struct {
+	models.SMSMessage
+	Code string `json:"code,omitempty"`
+}
+
 func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Request) {
-	var o models.PhoneCode
+	var o PhoneCode
 	err := json.NewDecoder(r.Body).Decode(&o)
 	if err != nil {
 		ez.InternalServerErrorHandler(w, r, err)
 		return
 	}
 	var phone string
-	phone, err = o.GetPhone()
+	phone, err = o.GetPhone(self.smsClient, true)
 	if err != nil {
 		ez.BadRequestHandler(w, r, err)
 		return
@@ -565,13 +570,19 @@ func (self *authService) createPhoneHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (self *authService) phoneHandler(w http.ResponseWriter, r *http.Request) {
-	var o models.PhoneCode
+	var o PhoneCode
 	err := json.NewDecoder(r.Body).Decode(&o)
 	if err != nil {
 		ez.InternalServerErrorHandler(w, r, err)
 		return
 	}
-	ez.DoOr401(w, r, self.payloadHandler)(self.auth.CheckPhone(r.Context(), &o))
+	var phone string
+	phone, err = o.GetPhone(self.smsClient, true)
+	if err != nil {
+		ez.BadRequestHandler(w, r, err)
+		return
+	}
+	ez.DoOr401(w, r, self.payloadHandler)(self.auth.CheckPhone(r.Context(), phone, o.Code))
 }
 
 func (self *authService) messageHandler(w http.ResponseWriter, r *http.Request) {

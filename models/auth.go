@@ -94,7 +94,7 @@ type Auth interface {
 	CleanAuthSessions(context.Context) error
 	CreateAuthCode(context.Context, string, string, string, string, time.Duration) error
 	CheckAuthCode(context.Context, string, string, string) error
-	CheckPhone(context.Context, *PhoneCode) (JWTPayload, error)
+	CheckPhone(context.Context, string, string) (JWTPayload, error)
 	CreateEmailVerification(context.Context, uuid.UUID, string) (string, error)
 	CheckEmailVerification(context.Context, string) (JWTPayload, error)
 	Message(context.Context, *AuthMessage) error
@@ -838,11 +838,6 @@ func (self *AuthDbImpl) IsLoggedIn(handler http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-type PhoneCode struct {
-	SMSMessage
-	Code string `json:"code,omitempty"`
-}
-
 func (self *AuthDbImpl) CreateAuthCode(ctx context.Context,
 	authMethod, authId, code, ipAddress string, duration time.Duration) error {
 	sql := `SELECT coalesce(sum(fail_count), 0) FROM auth.auth_code
@@ -896,12 +891,8 @@ last_updated = current_timestamp WHERE auth_method = $1 AND auth_id = $2`
 	return err
 }
 
-func (self *AuthDbImpl) CheckPhone(ctx context.Context, pc *PhoneCode) (JWTPayload, error) {
-	phone, err := pc.GetPhone()
-	if err != nil {
-		return nil, err
-	}
-	err = self.CheckAuthCode(ctx, "phone", phone, pc.Code)
+func (self *AuthDbImpl) CheckPhone(ctx context.Context, phone, code string) (JWTPayload, error) {
+	err := self.CheckAuthCode(ctx, "phone", phone, code)
 	if err != nil {
 		return nil, err
 	}
